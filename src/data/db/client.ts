@@ -6,6 +6,7 @@ import { createLogger } from '@/services/logger';
 
 import * as schema from './schema';
 import { MIGRATION_000 } from './migrations/migration-000';
+import { MIGRATION_001 } from './migrations/migration-001';
 
 const logger = createLogger('db');
 
@@ -32,12 +33,19 @@ export async function runMigrations(): Promise<void> {
         tag: '000_initial',
         breakpoints: true,
       },
+      {
+        idx: 1,
+        when: 1,
+        tag: '001_mission_claims',
+        breakpoints: true,
+      },
     ],
   };
   const migrations = {
     journal,
     migrations: {
       '000_initial': MIGRATION_000,
+      '001_mission_claims': MIGRATION_001,
     },
   };
   try {

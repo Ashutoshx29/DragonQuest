@@ -1,110 +1,123 @@
-import { useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, View } from 'react-native';
 
-import { Badge, Button, Card, ProgressBar, Screen, Sheet, ThemedText } from '@/design-system/components';
-import { questPalettes, spacing } from '@/design-system/tokens';
-import { sfx } from '@/services/audio';
-import { haptic } from '@/services/haptics';
+import { Badge, Button, Card, ProgressBar, Screen, ThemedText } from '@/design-system/components';
+import { palette, spacing } from '@/design-system/tokens';
+import { useDailyMissions } from '@/features/progression/hooks/useDailyMissions';
+import { MissionCard } from '@/features/progression/components/MissionCard';
+import { useProgression } from '@/features/progression/ProgressionProvider';
+import { getGlobalStreak, type GlobalStreak } from '@/data/repositories';
+import { useAsync } from '@/hooks/useAsync';
 
-/**
- * Today — daily dashboard. Currently showcases the Phase 2 design system;
- * becomes the live mission board in Phase 3–4.
- */
 export default function TodayScreen() {
-  const [xp] = useState(1240);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [pressed, setPressed] = useState(0);
-
-  const levelXpIntoLevel = 340;
-  const levelXpRequired = 634;
+  const { totals, levelState, title } = useProgression();
+  const missions = useDailyMissions();
+  const { data: streakData } = useAsync(() => getGlobalStreak(), []);
+  const streak = streakData as GlobalStreak | null;
 
   return (
     <Screen padded>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <ThemedText variant="display" color="textBright">
-            Today
-          </ThemedText>
-          <ThemedText variant="caption" color="textDim">
-            Day 1 of your training arc
-          </ThemedText>
+      <View style={styles.scroll}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <ThemedText variant="display" color="textBright">
+              Today
+            </ThemedText>
+            <ThemedText variant="caption" color="textDim">
+              {title ? `Rank · ${title}` : 'Begin your training arc'}
+            </ThemedText>
+          </View>
+          <Badge label={levelState ? `LV ${levelState.level}` : 'LV —'} variant="accent" />
         </View>
-        <Badge label="LV 5" variant="accent" />
-      </View>
 
-      <Card accent={questPalettes.mind.base}>
-        <View style={styles.rowBetween}>
-          <ThemedText variant="subheading" color="textBright">
-            Experience
-          </ThemedText>
-          <ThemedText variant="mono" color="accent">
-            {xp.toLocaleString()} XP
-          </ThemedText>
-        </View>
-        <ProgressBar value={levelXpIntoLevel / levelXpRequired} />
-        <ThemedText variant="caption" color="textFaint">
-          {levelXpIntoLevel} / {levelXpRequired} to level 6
-        </ThemedText>
-      </Card>
-
-      <Card accent={questPalettes.body.base} compact>
-        <View style={styles.rowBetween}>
-          <View style={styles.row}>
-            <View style={[styles.questDot, { backgroundColor: questPalettes.body.base }]} />
-            <View>
-              <ThemedText variant="subheading" color="textBright">
-                Morning training
+        {/* XP card */}
+        <Card accent={palette.aura}>
+          <View style={styles.rowBetween}>
+            <ThemedText variant="subheading" color="textBright">
+              Experience
+            </ThemedText>
+            <ThemedText variant="mono" color="accent">
+              {totals ? `${totals.totalXp.toLocaleString()} XP` : '…'}
+            </ThemedText>
+          </View>
+          {levelState ? (
+            <>
+              <ProgressBar value={levelState.progress} />
+              <ThemedText variant="caption" color="textFaint">
+                {levelState.xpIntoLevel} / {levelState.xpForNext} to level {levelState.level + 1}
+                {totals && totals.todayXp > 0 ? ` · +${totals.todayXp} today` : ''}
               </ThemedText>
-              <ThemedText variant="caption" color="textDim">
-                Body · 20 XP · 6 day streak
+            </>
+          ) : null}
+        </Card>
+
+        {/* Global streak */}
+        <Card compact>
+          <View style={styles.rowBetween}>
+            <View style={styles.row}>
+              <Ionicons name="flame" size={18} color="#FF8C42" />
+              <ThemedText variant="subheading" color="textBright">
+                {streak ? `${streak.current} day streak` : 'Streak'}
               </ThemedText>
             </View>
+            {streak && streak.atRisk ? <Badge label="AT RISK" variant="danger" /> : null}
+            {streak && streak.doneToday ? <Badge label="SECURED" variant="success" /> : null}
           </View>
-          <Badge label="×1.25" variant="power" />
+          <View style={styles.stripRow}>
+            {(streak?.last14 ?? []).map((d) => (
+              <View
+                key={d.day}
+                style={[styles.stripCell, { backgroundColor: d.hit ? '#FF8C42' : '#1A1E29' }]}
+              />
+            ))}
+          </View>
+        </Card>
+
+        {/* Daily missions */}
+        <View style={styles.sectionHeader}>
+          <ThemedText variant="heading" color="textBright">
+            Daily missions
+          </ThemedText>
+          {missions.board?.allDone ? <Badge label="ALL CLEAR" variant="gold" /> : null}
         </View>
-      </Card>
+        {missions.board?.missions.map((m) => (
+          <MissionCard
+            key={m.kind}
+            mission={m}
+            claimed={missions.board?.claimedKinds.includes(m.kind) ?? false}
+            claiming={missions.claiming === m.kind}
+            onClaim={(kind) => void missions.claim(kind)}
+          />
+        ))}
 
-      <View style={styles.row}>
-        <Button
-          label="Complete quest"
-          icon="checkmark"
-          onPress={() => {
-            sfx.play('complete');
-            haptic('success');
-            setPressed((p) => p + 1);
-          }}
-          style={styles.flex1}
-        />
-        <Button
-          label="Sheet"
-          icon="ellipsis-horizontal"
-          variant="secondary"
-          onPress={() => setSheetOpen(true)}
-        />
+        {missions.board?.allDone && !missions.board.bonusClaimed ? (
+          <Button
+            label={`Claim bonus chest · +${75} XP`}
+            icon="gift"
+            onPress={() => void missions.claimBonus()}
+            loading={missions.claiming === 'all_bonus'}
+          />
+        ) : null}
+        {missions.board?.bonusClaimed ? (
+          <ThemedText variant="caption" color="success" style={styles.bonusDone}>
+            Bonus chest secured. See you tomorrow, warrior.
+          </ThemedText>
+        ) : null}
       </View>
-
-      {pressed > 0 ? (
-        <ThemedText variant="caption" color="success">
-          Quest completed {pressed}× — haptics + sound pipeline working.
-        </ThemedText>
-      ) : null}
-
-      <Sheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Quest options">
-        <ThemedText variant="body" color="textDim">
-          Edit, archive, and reminder options for this quest will live here.
-        </ThemedText>
-        <Button label="Close" variant="ghost" onPress={() => setSheetOpen(false)} />
-      </Sheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
   },
   headerText: {
     gap: 2,
@@ -112,20 +125,29 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  flex1: {
-    flex: 1,
+  stripRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
-  questDot: {
-    width: 10,
+  stripCell: {
+    flex: 1,
     height: 10,
     borderRadius: 5,
-    marginRight: spacing.sm,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+  },
+  bonusDone: {
+    textAlign: 'center',
   },
 });

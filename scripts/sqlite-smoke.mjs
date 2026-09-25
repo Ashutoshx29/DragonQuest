@@ -6,8 +6,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 
-const src = readFileSync(new URL('../src/data/db/migrations/migration-000.ts', import.meta.url), 'utf8');
-const sql = src.match(/\/\* sql \*\/ `([\s\S]*)`/)[1];
+function extractSql(path) {
+  const src = readFileSync(new URL(path, import.meta.url), 'utf8');
+  return src.match(/\/\* sql \*\/ `([\s\S]*)`/)[1];
+}
+
+const sql = [extractSql('../src/data/db/migrations/migration-000.ts'), extractSql('../src/data/db/migrations/migration-001.ts')].join('\n');
 
 const db = new DatabaseSync(':memory:');
 db.exec(sql);
@@ -52,5 +56,18 @@ db.prepare(
   'INSERT INTO xp_transactions (id, amount, source, ref_id, created_at) VALUES (?, ?, ?, ?, ?)'
 ).run('x1', 30, 'habit', 'h1', now);
 console.log('OK: xp_transactions insert works');
+
+// one mission claim per (day, kind)
+const insClaim = db.prepare(
+  'INSERT INTO mission_claims (id, day, kind, xp_awarded, claimed_at) VALUES (?, ?, ?, ?, ?)'
+);
+insClaim.run('m1', '2026-09-26', 'any_three', 50, now);
+try {
+  insClaim.run('m2', '2026-09-26', 'any_three', 50, now);
+  console.error('FAIL: duplicate mission claim for same (day, kind) allowed');
+  process.exit(1);
+} catch {
+  console.log('OK: mission_claims unique (day, kind) enforced');
+}
 
 console.log('SMOKE PASSED');

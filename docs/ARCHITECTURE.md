@@ -73,7 +73,12 @@ Full column list lives in the project design doc; schema lands in `src/data/db/s
    quests board screen with quick-add, detail screens with edit/archive/delete.
    Migration SQL verified against drizzle-kit output + node:sqlite smoke test
    (`npm run smoke:db`).
-4. XP & progression — game engine (pure fns + tests), ledger, level-up/streak UI.
+4. ✅ **XP & progression** — level curve engine (base×n^1.6, config-tunable) with
+   16 passing unit tests (jest + jest-expo), deterministic daily missions
+   (seeded per day, evaluated from completions, idempotent claims via
+   mission_claims table), global streak derived from the ledger, XP delta
+   toast + level-up ceremony overlay via ProgressionProvider. Today screen is
+   now the live dashboard.
 5. Full schema & stats — goals, achievements, challenges, quotes, stats screens.
 6. Auth — Supabase, email + OAuth, anonymous→account upgrade.
 7. Cloud sync — Supabase schema + RLS, outbox sync engine, TanStack Query. ⚠️ hardest

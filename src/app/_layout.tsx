@@ -7,6 +7,7 @@ import { APP_NAME } from '@/constants';
 import { DbGate } from '@/data/db/DbGate';
 import { SplashGate } from '@/design-system/components';
 import { palette } from '@/design-system/tokens';
+import { ProgressionProvider } from '@/features/progression/ProgressionProvider';
 
 /**
  * Navigation theme for react-navigation (tab bar, screen backgrounds),
@@ -31,16 +32,18 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <DbGate>
           <SplashGate>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                cardStyle: { backgroundColor: palette.void },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
-              <Stack.Screen name="settings" />
-              <Stack.Screen name="+not-found" />
-            </Stack>
+            <ProgressionProvider>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  cardStyle: { backgroundColor: palette.void },
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
+                <Stack.Screen name="settings" />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+            </ProgressionProvider>
           </SplashGate>
         </DbGate>
       </ThemeProvider>

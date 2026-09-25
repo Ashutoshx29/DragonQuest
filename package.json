@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",
     "smoke:db": "node scripts/sqlite-smoke.mjs",
+    "test": "jest",
     "reset-project": "echo 'reset-project removed'"
   },
   "dependencies": {
@@ -34,6 +35,8 @@
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
+    "jest": "~29.7.0",
+    "jest-expo": "~57.0.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -45,6 +48,7 @@
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9.39.2",

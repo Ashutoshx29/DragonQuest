@@ -100,10 +100,24 @@ export const dailyCompletions = sqliteTable(
 
 export const xpTransactions = sqliteTable('xp_transactions', {
   id: text('id').primaryKey(),
-  amount: integer('amount').notNull(), // negative allowed (future: refunds)
-  /** 'habit' | 'task' | 'routine_item' | 'mission' | 'challenge' | 'manual' */
+  amount: integer('amount').notNull(), // negative allowed (corrections)
+  /** 'habit' | 'task' | 'routine_item' | 'mission' | 'bonus' | 'manual' */
   source: text('source').notNull(),
   refId: text('ref_id'),
   reason: text('reason'),
   createdAt: text('created_at').notNull(),
 });
+
+/** One claim per mission kind per day (kind also holds the 'all_bonus' sentinel). */
+export const missionClaims = sqliteTable(
+  'mission_claims',
+  {
+    id: text('id').primaryKey(),
+    /** LOCAL day (YYYY-MM-DD) the mission belongs to. */
+    day: text('day').notNull(),
+    kind: text('kind').notNull(),
+    xpAwarded: integer('xp_awarded').notNull().default(0),
+    claimedAt: text('claimed_at').notNull(),
+  },
+  (t) => [uniqueIndex('mission_claims_unique_day_kind').on(t.day, t.kind)]
+);

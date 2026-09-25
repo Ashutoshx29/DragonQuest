@@ -10,6 +10,7 @@ import {
   type ToggleResult,
 } from '@/data/repositories';
 import { useAsync } from '@/hooks/useAsync';
+import { notifyXpChanged } from '@/features/progression/xpEvents';
 import { haptic } from '@/services/haptics';
 import { sfx } from '@/services/audio';
 
@@ -31,6 +32,7 @@ export function useHabits(includeArchived = false) {
         } else {
           haptic('tap');
         }
+        notifyXpChanged();
         reload();
         return result;
       } finally {
