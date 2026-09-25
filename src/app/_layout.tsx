@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { APP_NAME } from '@/constants';
+import { SplashGate } from '@/design-system/components';
 import { palette } from '@/design-system/tokens';
 
 /**
@@ -27,16 +28,18 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider value={navigationTheme}>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            cardStyle: { backgroundColor: palette.void },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
-          <Stack.Screen name="settings" />
-          <Stack.Screen name="+not-found" />
-        </Stack>
+        <SplashGate>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              cardStyle: { backgroundColor: palette.void },
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+        </SplashGate>
       </ThemeProvider>
     </SafeAreaProvider>
   );

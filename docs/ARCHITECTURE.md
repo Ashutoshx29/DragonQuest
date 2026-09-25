@@ -60,9 +60,12 @@ Full column list lives in the project design doc; schema lands in `src/data/db/s
 
 ## Phases
 
-1. ✅ **Foundation** — this repo state: Expo + TS strict + ESLint/Prettier, design tokens,
-   themed primitives, root layout + 5 tabs, folder skeleton.
-2. Design system pass — primitives (Button, Card, ProgressBar, Badge), splash, motion.
+1. ✅ **Foundation** — Expo + TS strict + ESLint/Prettier, design tokens, themed
+   primitives, root layout + 5 tabs, folder skeleton.
+2. ✅ **Design system** — Button/Card/ProgressBar/Badge/Sheet primitives with press
+   springs + haptics, SplashGate animated intro, motion presets, logger/haptics/audio
+   (stub) services. Today screen showcases the system.
+   Phase 9 remains for Lottie ceremonies + real audio + full juice pass.
 3. Habits/routines/tasks — sqlite+drizzle, CRUD, completion, day-rollover.
 4. XP & progression — game engine (pure fns + tests), ledger, level-up/streak UI.
 5. Full schema & stats — goals, achievements, challenges, quotes, stats screens.
