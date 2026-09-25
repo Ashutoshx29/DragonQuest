@@ -99,3 +99,32 @@ export async function countActiveHabits(): Promise<number> {
     .where(sql`${habits.archivedAt} IS NULL`);
   return Number(row?.n ?? 0);
 }
+
+export interface StatsOverview {
+  totalXp: number;
+  totalCompletions: number;
+  activeDays: number;
+  /** Completion counts per day for the last 14 days (oldest first). */
+  last14: DaySummary[];
+  /** Days (of the last 14) with at least one completion. */
+  activeDaysLast14: number;
+}
+
+/** Aggregate stats for the Progress tab, all derived from the ledgers. */
+export async function getStatsOverview(): Promise<StatsOverview> {
+  const totals = await getXpTotals();
+  const [completions] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(dailyCompletions);
+  const [activeDays] = await db
+    .select({ n: sql<number>`count(distinct ${dailyCompletions.day})` })
+    .from(dailyCompletions);
+  const last14 = await getRecentDays(14);
+  return {
+    totalXp: totals.totalXp,
+    totalCompletions: Number(completions?.n ?? 0),
+    activeDays: Number(activeDays?.n ?? 0),
+    last14,
+    activeDaysLast14: last14.filter((d) => d.completions > 0).length,
+  };
+}

@@ -121,3 +121,65 @@ export const missionClaims = sqliteTable(
   },
   (t) => [uniqueIndex('mission_claims_unique_day_kind').on(t.day, t.kind)]
 );
+
+export const goals = sqliteTable(
+  'goals',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    category: text('category'),
+    /** Target day (YYYY-MM-DD) or null = open-ended. */
+    targetDay: text('target_day'),
+    /** 'active' | 'done' | 'abandoned' */
+    status: text('status').notNull().default('active'),
+    xpReward: integer('xp_reward').notNull().default(100),
+    completedAt: text('completed_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('goals_status_idx').on(t.status)]
+);
+
+export const milestones = sqliteTable(
+  'milestones',
+  {
+    id: text('id').primaryKey(),
+    goalId: text('goal_id')
+      .notNull()
+      .references(() => goals.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    completedAt: text('completed_at'),
+    orderIndex: integer('order_index').notNull().default(0),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('milestones_goal_idx').on(t.goalId, t.orderIndex)]
+);
+
+/** Unlocked achievements (definitions live in game/config/achievements.ts). */
+export const userAchievements = sqliteTable(
+  'user_achievements',
+  {
+    id: text('id').primaryKey(),
+    achievementId: text('achievement_id').notNull(),
+    unlockedAt: text('unlocked_at').notNull(),
+  },
+  (t) => [uniqueIndex('user_achievements_unique').on(t.achievementId)]
+);
+
+/** Challenge runs (definitions in game/config/challenges.ts). */
+export const userChallenges = sqliteTable('user_challenges', {
+  id: text('id').primaryKey(),
+  challengeId: text('challenge_id').notNull(),
+  startedDay: text('started_day').notNull(),
+  /** 'active' | 'completed' | 'failed' */
+  status: text('status').notNull().default('active'),
+  finishedDay: text('finished_day'),
+  createdAt: text('created_at').notNull(),
+});
+
+/** Simple key-value settings store (theme, sound, haptics, onboarding…). */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

@@ -11,7 +11,11 @@ function extractSql(path) {
   return src.match(/\/\* sql \*\/ `([\s\S]*)`/)[1];
 }
 
-const sql = [extractSql('../src/data/db/migrations/migration-000.ts'), extractSql('../src/data/db/migrations/migration-001.ts')].join('\n');
+const sql = [
+  extractSql('../src/data/db/migrations/migration-000.ts'),
+  extractSql('../src/data/db/migrations/migration-001.ts'),
+  extractSql('../src/data/db/migrations/migration-002.ts'),
+].join('\n');
 
 const db = new DatabaseSync(':memory:');
 db.exec(sql);
@@ -69,5 +73,37 @@ try {
 } catch {
   console.log('OK: mission_claims unique (day, kind) enforced');
 }
+
+// goals + milestones cascade
+const insGoal = db.prepare(
+  'INSERT INTO goals (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)'
+);
+insGoal.run('g1', 'Run a 10k', now, now);
+const insMilestone = db.prepare(
+  'INSERT INTO milestones (id, goal_id, title, order_index, created_at) VALUES (?, ?, ?, ?, ?)'
+);
+insMilestone.run('ms1', 'g1', 'Run 5k without stopping', 0, now);
+db.prepare('DELETE FROM goals WHERE id = ?').run('g1');
+const msLeft = db.prepare('SELECT COUNT(*) AS n FROM milestones').get();
+if (msLeft.n !== 0) {
+  console.error('FAIL: milestones not cascaded on goal delete');
+  process.exit(1);
+}
+console.log('OK: milestones cascade delete works');
+
+// achievements unique + settings KV
+const insAch = db.prepare(
+  'INSERT INTO user_achievements (id, achievement_id, unlocked_at) VALUES (?, ?, ?)'
+);
+insAch.run('ua1', 'first_blood', now);
+try {
+  insAch.run('ua2', 'first_blood', now);
+  console.error('FAIL: duplicate achievement unlock allowed');
+  process.exit(1);
+} catch {
+  console.log('OK: user_achievements unique achievement_id enforced');
+}
+db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run('sound', 'on');
+console.log('OK: app_settings KV works');
 
 console.log('SMOKE PASSED');

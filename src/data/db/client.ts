@@ -7,6 +7,7 @@ import { createLogger } from '@/services/logger';
 import * as schema from './schema';
 import { MIGRATION_000 } from './migrations/migration-000';
 import { MIGRATION_001 } from './migrations/migration-001';
+import { MIGRATION_002 } from './migrations/migration-002';
 
 const logger = createLogger('db');
 
@@ -39,6 +40,12 @@ export async function runMigrations(): Promise<void> {
         tag: '001_mission_claims',
         breakpoints: true,
       },
+      {
+        idx: 2,
+        when: 2,
+        tag: '002_goals_achievements_settings',
+        breakpoints: true,
+      },
     ],
   };
   const migrations = {
@@ -46,6 +53,7 @@ export async function runMigrations(): Promise<void> {
     migrations: {
       '000_initial': MIGRATION_000,
       '001_mission_claims': MIGRATION_001,
+      '002_goals_achievements_settings': MIGRATION_002,
     },
   };
   try {

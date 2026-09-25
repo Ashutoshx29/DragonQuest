@@ -79,7 +79,12 @@ Full column list lives in the project design doc; schema lands in `src/data/db/s
    mission_claims table), global streak derived from the ledger, XP delta
    toast + level-up ceremony overlay via ProgressionProvider. Today screen is
    now the live dashboard.
-5. Full schema & stats — goals, achievements, challenges, quotes, stats screens.
+5. ✅ **Goals, achievements, challenges, stats** — goals + milestones (cascade
+   delete, XP on completion), 15 achievement defs evaluated by pure engine with
+   unlock ceremony overlay, 3 training-challenge programs (7/14/30-day windows,
+   per-day hit tracking, quit/complete flows), quote of the day, stats overview
+   + achievement gallery on Progress tab, character sheet on Profile, working
+   sound/haptics settings (persisted, applied at startup).
 6. Auth — Supabase, email + OAuth, anonymous→account upgrade.
 7. Cloud sync — Supabase schema + RLS, outbox sync engine, TanStack Query. ⚠️ hardest
 8. Notifications — local reminders first; EAS dev build for push.

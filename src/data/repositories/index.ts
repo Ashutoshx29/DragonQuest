@@ -4,3 +4,7 @@ export * from './routines';
 export * from './progress';
 export * from './missions';
 export * from './globalStreak';
+export * from './goals';
+export * from './achievements';
+export * from './challenges';
+export * from './settings';

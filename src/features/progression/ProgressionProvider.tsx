@@ -2,14 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
+import { AchievementOverlay } from '@/design-system/components/AchievementOverlay';
 import { LevelUpOverlay, type LevelUpInfo } from '@/design-system/components/LevelUpOverlay';
 import { ThemedText } from '@/design-system/components/ThemedText';
 import { springPresets } from '@/design-system/motion';
 import { radius, spacing } from '@/design-system/tokens';
-import { getXpTotals } from '@/data/repositories';
+import { checkAndUnlockAchievements, getSettings, getXpTotals } from '@/data/repositories';
 import { levelFromTotalXp, rankTitle, type LevelState } from '@/game/config/levels';
+import type { AchievementDef } from '@/game/config/achievements';
 import { sfx } from '@/services/audio';
-import { haptic } from '@/services/haptics';
+import { haptic, setHapticsEnabled } from '@/services/haptics';
 import { onXpChanged } from './xpEvents';
 
 interface ProgressionContextValue {
@@ -38,6 +40,7 @@ interface ToastState {
 export function ProgressionProvider({ children }: { children: React.ReactNode }) {
   const [totals, setTotals] = useState<{ totalXp: number; todayXp: number } | null>(null);
   const [levelUp, setLevelUp] = useState<LevelUpInfo | null>(null);
+  const [achievement, setAchievement] = useState<AchievementDef | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const lastLevelRef = useRef<number | null>(null);
   const lastTotalRef = useRef<number | null>(null);
@@ -48,6 +51,16 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
     const next = await getXpTotals();
     if (!mountedRef.current) return;
     setTotals(next);
+
+    // Achievements: check for new unlocks after any XP change.
+    const unlocks = await checkAndUnlockAchievements();
+    if (unlocks.length > 0 && mountedRef.current) {
+      haptic('levelUp');
+      sfx.play('achievement');
+      setAchievement(unlocks[0]);
+      // Reward XP lands in the ledger synchronously above; totals already
+      // include it, so no extra refresh needed for the reward itself.
+    }
 
     // XP gain toast (skip the initial load)
     if (lastTotalRef.current !== null && next.totalXp > lastTotalRef.current) {
@@ -69,6 +82,11 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     mountedRef.current = true;
+    // Apply persisted feedback settings at startup.
+    void getSettings().then((s) => {
+      setHapticsEnabled(s.haptics);
+      sfx.setEnabled(s.sound);
+    });
     void refresh();
     const unsubscribe = onXpChanged(() => {
       void refresh();
@@ -116,6 +134,7 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
           </Animated.View>
         ) : null}
         <LevelUpOverlay info={levelUp} onDismiss={() => setLevelUp(null)} />
+        <AchievementOverlay achievement={achievement} onDismiss={() => setAchievement(null)} />
       </View>
     </ProgressionContext.Provider>
   );
