@@ -1,18 +1,43 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { DarkTheme, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router/js-stack';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { APP_NAME } from '@/constants';
+import { palette } from '@/design-system/tokens';
 
-SplashScreen.preventAutoHideAsync();
+/**
+ * Navigation theme for react-navigation (tab bar, screen backgrounds),
+ * derived from our design tokens so native chrome matches the app theme.
+ */
+const navigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: palette.void,
+    card: palette.night,
+    primary: palette.aura,
+    text: palette.textBright,
+    border: palette.line,
+  },
+};
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={navigationTheme}>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            cardStyle: { backgroundColor: palette.void },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

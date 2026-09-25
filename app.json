@@ -1,18 +1,21 @@
 {
   "expo": {
     "name": "DragonQuest",
-    "slug": "DragonQuest",
-    "version": "1.0.0",
+    "slug": "dragonquest",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dragonquest",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.dragonquest.app",
+      "supportsTablet": true
     },
     "android": {
+      "package": "com.dragonquest.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07080C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,7 +31,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#07080C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
