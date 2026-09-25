@@ -42,3 +42,6 @@ example
 # generated native folders
 /ios
 /android
+
+# drizzle-kit scratch output (migrations are hand-written in src/data/db/migrations)
+drizzle/

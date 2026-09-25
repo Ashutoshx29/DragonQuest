@@ -40,6 +40,7 @@ Data (src/data: sqlite+drizzle now; sync outbox → Supabase in Phase 7)
 5. Completion dates are **local calendar dates (`YYYY-MM-DD`)**, never UTC timestamps
    (`src/lib/dates.ts` owns day-rollover logic) — streaks depend on it.
 6. `daily_completions` + `xp_transactions` are append-only ledgers; all stats are derived.
+   (Un-completing inserts a negative correction row; rows are never updated.)
 
 ## Data model (entities)
 
@@ -66,7 +67,12 @@ Full column list lives in the project design doc; schema lands in `src/data/db/s
    springs + haptics, SplashGate animated intro, motion presets, logger/haptics/audio
    (stub) services. Today screen showcases the system.
    Phase 9 remains for Lottie ceremonies + real audio + full juice pass.
-3. Habits/routines/tasks — sqlite+drizzle, CRUD, completion, day-rollover.
+3. ✅ **Habits/routines/tasks** — SQLite (expo-sqlite) + drizzle schema & hand-written
+   reviewed migration, repository layer, habit/task/routine CRUD + completion toggles
+   with XP ledger entries, streak engine (pure fns), local-day date utilities,
+   quests board screen with quick-add, detail screens with edit/archive/delete.
+   Migration SQL verified against drizzle-kit output + node:sqlite smoke test
+   (`npm run smoke:db`).
 4. XP & progression — game engine (pure fns + tests), ledger, level-up/streak UI.
 5. Full schema & stats — goals, achievements, challenges, quotes, stats screens.
 6. Auth — Supabase, email + OAuth, anonymous→account upgrade.

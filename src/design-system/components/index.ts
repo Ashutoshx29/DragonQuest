@@ -1,8 +1,12 @@
 export { Badge } from './Badge';
 export { Button } from './Button';
 export { Card } from './Card';
+export { EmptyState } from './EmptyState';
+export { IconButton } from './IconButton';
+export { Input } from './Input';
 export { ProgressBar } from './ProgressBar';
 export { Screen } from './Screen';
+export { SegmentedControl } from './SegmentedControl';
 export { Sheet } from './Sheet';
 export { SplashGate } from './SplashGate';
 export { ThemedText } from './ThemedText';
