@@ -7,6 +7,15 @@ module.exports = defineConfig([
   expoConfig,
   prettier,
   {
-    ignores: ['dist/*', 'node_modules/*', '.expo/*'],
+    rules: {
+      // react-native-reanimated shared values (`sv.value = x` inside event
+      // handlers / worklets) are the sanctioned animation pattern in this
+      // codebase. The React-Compiler immutability rule cannot see through
+      // Reanimated's mutable ref and false-positives on every write.
+      'react-hooks/immutability': 'off',
+    },
+  },
+  {
+    ignores: ['dist/*', 'node_modules/*', '.expo/*', '.expo-dev.log'],
   },
 ]);

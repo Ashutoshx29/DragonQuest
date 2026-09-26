@@ -1,97 +1,112 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { Card, ProgressBar, Screen, ThemedText } from '@/design-system/components';
+import {
+  AchievementCard,
+  AttributeCard,
+  CalendarHistory,
+  Card,
+  ProgressChart,
+  Screen,
+  ThemedText,
+  XPBar,
+  type DayMark,
+} from '@/design-system/components';
 import { spacing } from '@/design-system/tokens';
 import { useAchievements } from '@/features/progression/hooks/useAchievements';
 import { useProgression } from '@/features/progression/ProgressionProvider';
+import { useAttributes } from '@/features/progression/hooks/useAttributes';
+import { useTrainingSessions } from '@/features/training/hooks/useTrainingSessions';
 import { getStatsOverview, type StatsOverview } from '@/data/repositories';
-import { TIER_META } from '@/game/config/achievements';
 import { useAsync } from '@/hooks/useAsync';
 
+/**
+ * PROGRESS — answers "how am I progressing?" Attributes first, then the
+ * level/XP/streak summary, weekly training chart, activity history and
+ * achievements. First screenful = the five attribute bars.
+ */
 export default function ProgressScreen() {
-  const { totals, levelState, title } = useProgression();
+  const { totals, levelState, snapshot } = useProgression();
+  const attributes = useAttributes();
   const { achievements } = useAchievements();
-  const { data: stats } = useAsync(() => getStatsOverview(), []);
-  const overview = stats as StatsOverview | null;
+  const { data: statsData } = useAsync(() => getStatsOverview(), []);
+  const training = useTrainingSessions();
+  const overview = statsData as StatsOverview | null;
+  // Streak/training-day values from the SINGLE SOURCE OF TRUTH.
+  const streak = snapshot?.streak ?? null;
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
+
+  const calendarDays = useMemo(() => {
+    const map: Record<string, DayMark[]> = {};
+    for (const d of overview?.last14 ?? []) {
+      if (d.completions > 0) map[d.day] = [...(map[d.day] ?? []), 'active'];
+    }
+    return map;
+  }, [overview]);
+
+  const weeklyPoints = training.weeklyMinutes.map((d) => ({
+    label: d.day.slice(8, 10),
+    value: d.minutes,
+  }));
 
   return (
     <Screen edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <ThemedText variant="display" color="textBright">
-            Progress
-          </ThemedText>
+        <ThemedText variant="display" color="textBright">
+          Progress
+        </ThemedText>
+
+        {/* Attributes first — the RPG stat sheet */}
+        <View style={styles.attrList}>
+          {attributes
+            ? (['power', 'focus', 'discipline', 'mind', 'energy'] as const).map((key) => (
+                <AttributeCard key={key} view={attributes[key]} />
+              ))
+            : null}
+        </View>
+
+        {/* Level / XP / streak summary */}
+        <Card>
+          <View style={styles.rowBetween}>
+            <ThemedText variant="subheading" color="textBright">
+              Level {levelState?.level ?? '—'}
+            </ThemedText>
+            <ThemedText variant="mono" color="gold">
+              {totals ? totals.totalXp.toLocaleString() : '—'} total XP
+            </ThemedText>
+          </View>
+          <XPBar
+            value={levelState?.progress ?? 0}
+            current={levelState?.xpIntoLevel}
+            target={levelState?.xpForNext}
+          />
           <ThemedText variant="caption" color="textDim">
-            {title ? `Rank · ${title}` : 'Your journey begins'}
+            🔥 {streak?.current ?? 0}-day training streak · {snapshot?.trainingDaysLast14 ?? overview?.activeDaysLast14 ?? 0}/14 days active · {snapshot?.trainingDays ?? overview?.activeDays ?? 0} all-time
           </ThemedText>
-        </View>
+        </Card>
 
-        {/* Stat tiles */}
-        <View style={styles.tileRow}>
-          <Card compact style={styles.tile}>
-            <ThemedText variant="display" color="accent">
-              {levelState ? levelState.level : '—'}
-            </ThemedText>
-            <ThemedText variant="caption" color="textDim">
-              Level
-            </ThemedText>
-          </Card>
-          <Card compact style={styles.tile}>
-            <ThemedText variant="display" color="gold">
-              {totals ? totals.totalXp.toLocaleString() : '—'}
-            </ThemedText>
-            <ThemedText variant="caption" color="textDim">
-              Total XP
-            </ThemedText>
-          </Card>
-        </View>
-        <View style={styles.tileRow}>
-          <Card compact style={styles.tile}>
-            <ThemedText variant="display" color="power">
-              {overview ? overview.totalCompletions : '—'}
-            </ThemedText>
-            <ThemedText variant="caption" color="textDim">
-              Quests done
-            </ThemedText>
-          </Card>
-          <Card compact style={styles.tile}>
-            <ThemedText variant="display" color="success">
-              {overview ? overview.activeDays : '—'}
-            </ThemedText>
-            <ThemedText variant="caption" color="textDim">
-              Active days
-            </ThemedText>
-          </Card>
-        </View>
-
-        {/* 14-day activity */}
+        {/* Weekly training minutes */}
         <Card>
           <ThemedText variant="subheading" color="textBright">
-            Last 14 days
+            Training minutes · last 7 days
           </ThemedText>
-          <View style={styles.stripRow}>
-            {(overview?.last14 ?? []).map((d) => {
-              const intensity = Math.min(1, d.completions / 5);
-              return (
-                <View
-                  key={d.day}
-                  style={[
-                    styles.stripCell,
-                    {
-                      backgroundColor:
-                        d.completions > 0 ? `rgba(0, 229, 255, ${0.25 + intensity * 0.75})` : '#1A1E29',
-                    },
-                  ]}
-                />
-              );
-            })}
-          </View>
-          <ThemedText variant="caption" color="textFaint">
-            {overview ? `${overview.activeDaysLast14} of 14 days active` : '…'}
+          <ProgressChart points={weeklyPoints} unitSuffix=" min" />
+        </Card>
+
+        {/* Quest completion history + calendar */}
+        <Card>
+          <ThemedText variant="subheading" color="textBright">
+            Activity
           </ThemedText>
+          <ProgressChart
+            points={(overview?.last14 ?? []).slice(-7).map((d) => ({
+              label: d.day.slice(8, 10),
+              value: d.completions,
+            }))}
+            color="#4ADE80"
+          />
+          <CalendarHistory days={calendarDays} />
         </Card>
 
         {/* Achievements */}
@@ -103,51 +118,15 @@ export default function ProgressScreen() {
             {unlockedCount}/{achievements.length}
           </ThemedText>
         </View>
-        {achievements.map((a) => {
-          const tier = TIER_META[a.def.tier];
-          return (
-            <Card key={a.def.id} compact accent={a.unlocked ? tier.color : undefined} style={styles.achCard}>
-              <View style={styles.achRow}>
-                <View
-                  style={[
-                    styles.achIcon,
-                    { borderColor: a.unlocked ? tier.color : '#2C3242' },
-                  ]}
-                >
-                  <Ionicons
-                    name={a.def.icon as never}
-                    size={22}
-                    color={a.unlocked ? tier.color : '#5A6172'}
-                  />
-                </View>
-                <View style={styles.achBody}>
-                  <View style={styles.achTitleRow}>
-                    <ThemedText
-                      variant="subheading"
-                      color={a.unlocked ? 'textBright' : 'textDim'}
-                      numberOfLines={1}
-                    >
-                      {a.def.title}
-                    </ThemedText>
-                    <ThemedText variant="caption" style={{ color: tier.color }}>
-                      {tier.label}
-                    </ThemedText>
-                  </View>
-                  <ThemedText variant="caption" color="textDim" numberOfLines={1}>
-                    {a.def.description}
-                  </ThemedText>
-                  {!a.unlocked ? (
-                    <ProgressBar value={a.progress} height={4} />
-                  ) : (
-                    <ThemedText variant="caption" color="success">
-                      Unlocked{a.unlockedAt ? ` · ${a.unlockedAt.slice(0, 10)}` : ''}
-                    </ThemedText>
-                  )}
-                </View>
-              </View>
-            </Card>
-          );
-        })}
+        {achievements.map((a) => (
+          <AchievementCard
+            key={a.def.id}
+            def={a.def}
+            unlocked={a.unlocked}
+            unlockedAt={a.unlockedAt}
+            progress={a.progress}
+          />
+        ))}
       </ScrollView>
     </Screen>
   );
@@ -159,57 +138,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
   },
-  header: {
-    gap: 2,
-    marginBottom: spacing.sm,
+  attrList: {
+    gap: spacing.sm,
   },
-  tileRow: {
+  rowBetween: {
     flexDirection: 'row',
-    gap: spacing.md,
-  },
-  tile: {
-    flex: 1,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 2,
-  },
-  stripRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginVertical: spacing.sm,
-  },
-  stripCell: {
-    flex: 1,
-    height: 14,
-    borderRadius: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: spacing.sm,
-  },
-  achCard: {
-    marginBottom: 0,
-  },
-  achRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  achIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  achBody: {
-    flex: 1,
-    gap: 4,
-  },
-  achTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
 });

@@ -183,3 +183,68 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+// ── Training redesign (additive — migration 0001) ─────────────────────────
+
+/** One daily Training Log entry per local day (upserted as the user edits). */
+export const journalEntries = sqliteTable(
+  'journal_entries',
+  {
+    id: text('id').primaryKey(),
+    /** LOCAL calendar day (YYYY-MM-DD) — unique, one entry per day. */
+    day: text('day').notNull(),
+    /** Self-rated 1..5; null = not rated. */
+    mood: integer('mood'),
+    energy: integer('energy'),
+    discipline: integer('discipline'),
+    accomplished: text('accomplished'),
+    challenged: text('challenged'),
+    learned: text('learned'),
+    /** Tomorrow's mission / intention. */
+    tomorrowIntent: text('tomorrow_intent'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [uniqueIndex('journal_entries_unique_day').on(t.day)]
+);
+
+/**
+ * Training sessions — focus/mind/breath timers and logged physical training.
+ * One row per completed session; XP award mirrors the ledger conventions.
+ */
+export const trainingSessions = sqliteTable(
+  'training_sessions',
+  {
+    id: text('id').primaryKey(),
+    /** 'workout' | 'focus' | 'mind' | 'breath' */
+    kind: text('kind').notNull(),
+    /** Short user label, e.g. the workout name. */
+    title: text('title'),
+    /** Session length in seconds (0 for quick-log workouts). */
+    durationSec: integer('duration_sec').notNull().default(0),
+    /** ISO-8601 UTC timestamp of completion. */
+    completedAt: text('completed_at').notNull(),
+    /** LOCAL calendar day (YYYY-MM-DD) — mirrors daily_completions.day. */
+    day: text('day').notNull(),
+    xpAwarded: integer('xp_awarded').notNull().default(0),
+    /** Free-form JSON for workout details (sets/reps/etc.) — evolving shape. */
+    payloadJson: text('payload_json'),
+  },
+  (t) => [index('training_sessions_day_idx').on(t.day)]
+);
+
+/**
+ * Per-device sync watermarks (Phase 6). One row per synced table:
+ * ISO timestamps of the newest row pushed/pulled. Purely local
+ * bookkeeping — never synced itself.
+ */
+export const syncCursors = sqliteTable(
+  'sync_cursors',
+  {
+    id: text('id').primaryKey(),
+    tableName: text('table_name').notNull(),
+    lastPulledAt: text('last_pulled_at'),
+    lastPushedAt: text('last_pushed_at'),
+  },
+  (t) => [uniqueIndex('sync_cursors_table_idx').on(t.tableName)]
+);

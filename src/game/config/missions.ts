@@ -2,6 +2,7 @@
  * Daily mission definitions — tuning values live here.
  *
  * Kinds are evaluated from the day's completion stats (see engine/missions.ts).
+ * UI copy uses the training-RPG glossary (mission/objective/ritual).
  * Add a new mission by: adding a def here, an evaluator in the engine, and
  * data in getMissionStats() — no UI changes needed.
  */
@@ -19,13 +20,13 @@ export const MISSION_DEFS: Record<MissionKind, MissionDef> = {
   any_three: {
     kind: 'any_three',
     title: 'Daily Training',
-    description: 'Complete 3 quests today',
+    description: 'Complete 3 missions today',
     rewardXp: 50,
   },
   perfect_day: {
     kind: 'perfect_day',
     title: 'Perfect Day',
-    description: 'Complete every quest scheduled today',
+    description: 'Complete every mission scheduled today',
     rewardXp: 100,
   },
   routine_run: {

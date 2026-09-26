@@ -25,6 +25,10 @@ export interface MissionView {
   description: string;
   rewardXp: number;
   done: boolean;
+  /** Human-readable progress, e.g. "2 / 3" — null when not countable. */
+  progressLabel: string | null;
+  /** 0..1 completion fraction for progress bars (1 when done). */
+  progress: number;
 }
 
 /** Small deterministic string hash (FNV-1a style). */
@@ -50,18 +54,31 @@ export function evaluateMissions(kinds: MissionKind[], stats: MissionStats): Mis
   return kinds.map((kind) => {
     const def = MISSION_DEFS[kind];
     let done = false;
+    let progressLabel: string | null = null;
+    let progress = 0;
     switch (kind) {
-      case 'any_three':
-        done = stats.completionsToday >= 3;
+      case 'any_three': {
+        const target = 3;
+        const current = Math.min(stats.completionsToday, target);
+        done = stats.completionsToday >= target;
+        progress = Math.min(1, stats.completionsToday / target);
+        progressLabel = `${current} / ${target}`;
         break;
-      case 'perfect_day':
+      }
+      case 'perfect_day': {
         done = stats.scheduledToday > 0 && stats.perfectDay;
+        progress = done ? 1 : stats.scheduledToday > 0 ? 0 : 0;
+        progressLabel = done ? 'COMPLETE' : 'ALL MISSIONS DONE';
         break;
-      case 'routine_run':
+      }
+      case 'routine_run': {
         done = stats.routineCompletedToday;
+        progress = done ? 1 : 0;
+        progressLabel = done ? 'COMPLETE' : 'NOT YET TODAY';
         break;
+      }
     }
-    return { ...def, done };
+    return { ...def, done, progressLabel, progress };
   });
 }
 

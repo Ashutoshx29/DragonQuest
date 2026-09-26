@@ -21,11 +21,11 @@ export const palette = {
   graphite: '#232837',
   line: '#2C3242',
 
-  // Text
+  // Text — dim/faint lifted for WCAG-ish contrast on the dark bg
   textBright: '#F4F6FB',
-  text: '#D7DCE8',
-  textDim: '#8B93A7',
-  textFaint: '#5A6172',
+  text: '#DCE1EC',
+  textDim: '#9AA3B8',
+  textFaint: '#6E7689',
 
   // Aura (primary accent — electric cyan)
   aura: '#00E5FF',
@@ -52,9 +52,56 @@ export const palette = {
   ember: '#FF8C42',
   emberDim: 'rgba(255, 140, 66, 0.18)',
 
-  // XP bars / progress
-  xpFill: '#00E5FF',
+  // Mind / Energy semantic accents (reduce cyan overload)
+  mind: '#A78BFA',
+  mindDim: 'rgba(167, 139, 250, 0.15)',
+  energy: '#4ADE80',
+  energyDim: 'rgba(74, 222, 128, 0.15)',
+
+  // XP bars / progress — gold reads as "achievement currency", cyan stays
+  // for focus/live feedback. Neutral track keeps bars from over-glowing.
+  xpFill: '#FFC94D',
   xpTrack: '#1A1E29',
+
+  // Attributes (training RPG stat colors)
+  attrPower: '#FF6B35', // physical training — orange/red energy
+  attrFocus: '#00E5FF', // deep work / study — electric blue
+  attrDiscipline: '#FFC94D', // habit consistency — gold
+  attrMind: '#A78BFA', // meditation / mind training — purple
+  attrEnergy: '#4ADE80', // recovery / healthy routines — green
+} as const;
+
+/**
+ * Attribute definitions — presentation layer of the training-RPG model.
+ * Values are DERIVED from existing ledgers (see game/config/attributes.ts);
+ * this map only carries the visual identity (color + ionicon + label).
+ */
+export const attributeMeta = {
+  power: { label: 'POWER', color: palette.attrPower, icon: 'barbell' },
+  focus: { label: 'FOCUS', color: palette.attrFocus, icon: 'flash' },
+  discipline: { label: 'DISCIPLINE', color: palette.attrDiscipline, icon: 'shield-checkmark' },
+  mind: { label: 'MIND', color: palette.attrMind, icon: 'leaf' },
+  energy: { label: 'ENERGY', color: palette.attrEnergy, icon: 'battery-charging' },
+} as const;
+
+export type AttributeKey = keyof typeof attributeMeta;
+
+/**
+ * Product glossary — the UI speaks "training RPG"; the data layer speaks
+ * "habits/tasks". Screens use these labels so renaming the presentation is
+ * a one-file change and the DB/repository interfaces stay stable.
+ */
+export const GLOSSARY = {
+  habit: 'Mission',
+  task: 'Objective',
+  routine: 'Ritual',
+  goal: 'Grand Quest',
+  workout: 'Physical Training',
+  meditation: 'Mind Training',
+  focusSession: 'Focus Training',
+  journal: 'Journal',
+  streak: 'Training Streak',
+  attributes: 'Attributes',
 } as const;
 
 // ── Spacing scale (4pt grid) ────────────────────────────────────────────────
@@ -90,7 +137,7 @@ export const typography = {
   mono: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
 } as const;
 
-// ── Named quest palettes (habit/category colors) ────────────────────────────
+// ── Named quest palettes (habit/category colors) ──────────────────────────
 export const questPalettes = {
   body: { base: '#FF6B35', soft: '#FFA270', dim: 'rgba(255, 107, 53, 0.15)' },
   mind: { base: '#00E5FF', soft: '#66F0FF', dim: 'rgba(0, 229, 255, 0.15)' },
@@ -100,3 +147,14 @@ export const questPalettes = {
 } as const;
 
 export type QuestPaletteKey = keyof typeof questPalettes;
+
+// ── Gradient presets (expo-linear-gradient) ───────────────────────────────
+// Restrained by design: gradients appear ONLY on hero panels (character
+// header, reward overlay, primary CTA) — never on every card.
+export const gradients = {
+  hero: ['#12151D', '#07080C'] as const,
+  heroAccent: ['#12202B', '#07080C'] as const,
+  cta: ['#00C2D9', '#0088A8'] as const,
+  gold: ['#3A2E12', '#12151D'] as const,
+  power: ['#2B1608', '#07080C'] as const,
+} as const;

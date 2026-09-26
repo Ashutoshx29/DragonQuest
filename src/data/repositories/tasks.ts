@@ -83,8 +83,16 @@ export async function updateTask(id: string, patch: UpdateTaskInput): Promise<vo
   await db.update(tasks).set(values).where(eq(tasks.id, id));
 }
 
+/**
+ * Soft-delete a task (tombstone). Phase 6: hard deletes cannot be
+ * synchronized (a pulled copy would resurrect), so deletions stamp
+ * deletedAt and let every device converge on the same tombstone.
+ */
 export async function deleteTask(id: string): Promise<void> {
-  await db.delete(tasks).where(eq(tasks.id, id));
+  await db
+    .update(tasks)
+    .set({ deletedAt: nowIso(), updatedAt: nowIso() })
+    .where(eq(tasks.id, id));
 }
 
 export async function toggleTask(id: string): Promise<{ completed: boolean; xpDelta: number }> {

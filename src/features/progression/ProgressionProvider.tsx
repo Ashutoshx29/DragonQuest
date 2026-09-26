@@ -7,7 +7,7 @@ import { LevelUpOverlay, type LevelUpInfo } from '@/design-system/components/Lev
 import { ThemedText } from '@/design-system/components/ThemedText';
 import { springPresets } from '@/design-system/motion';
 import { radius, spacing } from '@/design-system/tokens';
-import { checkAndUnlockAchievements, getSettings, getXpTotals } from '@/data/repositories';
+import { checkAndUnlockAchievements, getSettings, getProgressionSnapshot, type ProgressionSnapshot } from '@/data/repositories';
 import { levelFromTotalXp, rankTitle, type LevelState } from '@/game/config/levels';
 import type { AchievementDef } from '@/game/config/achievements';
 import { sfx } from '@/services/audio';
@@ -15,16 +15,20 @@ import { haptic, setHapticsEnabled } from '@/services/haptics';
 import { onXpChanged } from './xpEvents';
 
 interface ProgressionContextValue {
-  totals: { totalXp: number; todayXp: number } | null;
+  /** THE progression snapshot — every screen reads numbers from here. */
+  snapshot: ProgressionSnapshot | null;
   levelState: LevelState | null;
   title: string;
+  /** XP totals (kept for convenience; equals snapshot fields). */
+  totals: { totalXp: number; todayXp: number } | null;
   refresh: () => Promise<void>;
 }
 
 const ProgressionContext = createContext<ProgressionContextValue>({
-  totals: null,
+  snapshot: null,
   levelState: null,
   title: '',
+  totals: null,
   refresh: async () => {},
 });
 
@@ -38,9 +42,10 @@ interface ToastState {
 }
 
 export function ProgressionProvider({ children }: { children: React.ReactNode }) {
-  const [totals, setTotals] = useState<{ totalXp: number; todayXp: number } | null>(null);
+  const [snapshot, setSnapshot] = useState<ProgressionSnapshot | null>(null);
   const [levelUp, setLevelUp] = useState<LevelUpInfo | null>(null);
-  const [achievement, setAchievement] = useState<AchievementDef | null>(null);
+  /** FIFO queue — multiple achievements from one action reveal in sequence. */
+  const [achievementQueue, setAchievementQueue] = useState<AchievementDef[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
   const lastLevelRef = useRef<number | null>(null);
   const lastTotalRef = useRef<number | null>(null);
@@ -48,18 +53,18 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
-    const next = await getXpTotals();
+    const next = await getProgressionSnapshot();
     if (!mountedRef.current) return;
-    setTotals(next);
+    setSnapshot(next);
 
-    // Achievements: check for new unlocks after any XP change.
+    // Achievements: enqueue ALL new unlocks; the overlay reveals them one
+    // at a time (multiple can land from a single action — e.g. a mission
+    // claim that also crosses a level threshold).
     const unlocks = await checkAndUnlockAchievements();
     if (unlocks.length > 0 && mountedRef.current) {
       haptic('levelUp');
       sfx.play('achievement');
-      setAchievement(unlocks[0]);
-      // Reward XP lands in the ledger synchronously above; totals already
-      // include it, so no extra refresh needed for the reward itself.
+      setAchievementQueue((q) => [...q, ...unlocks]);
     }
 
     // XP gain toast (skip the initial load)
@@ -111,15 +116,16 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
     transform: [{ scale: toastOpacity.value }],
   }));
 
-  const levelState = totals ? levelFromTotalXp(totals.totalXp) : null;
+  const levelState = snapshot ? levelFromTotalXp(snapshot.totalXp) : null;
   const value = useMemo<ProgressionContextValue>(
     () => ({
-      totals,
+      snapshot,
       levelState,
       title: levelState ? rankTitle(levelState.level) : '',
+      totals: snapshot ? { totalXp: snapshot.totalXp, todayXp: snapshot.todayXp } : null,
       refresh,
     }),
-    [totals, levelState, refresh]
+    [snapshot, levelState, refresh]
   );
 
   return (
@@ -134,7 +140,10 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
           </Animated.View>
         ) : null}
         <LevelUpOverlay info={levelUp} onDismiss={() => setLevelUp(null)} />
-        <AchievementOverlay achievement={achievement} onDismiss={() => setAchievement(null)} />
+        <AchievementOverlay
+          achievement={achievementQueue[0] ?? null}
+          onDismiss={() => setAchievementQueue((q) => q.slice(1))}
+        />
       </View>
     </ProgressionContext.Provider>
   );

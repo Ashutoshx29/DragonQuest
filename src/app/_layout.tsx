@@ -7,6 +7,8 @@ import { APP_NAME } from '@/constants';
 import { DbGate } from '@/data/db/DbGate';
 import { SplashGate } from '@/design-system/components';
 import { palette } from '@/design-system/tokens';
+import { AuthProvider } from '@/features/auth/AuthProvider';
+import { useSyncTriggers } from '@/services/sync/syncTriggers';
 import { ProgressionProvider } from '@/features/progression/ProgressionProvider';
 
 /**
@@ -25,6 +27,12 @@ const navigationTheme = {
   },
 };
 
+/** Root-level side effects that need auth + progression contexts. */
+function AppEffects() {
+  useSyncTriggers();
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
@@ -32,18 +40,22 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <DbGate>
           <SplashGate>
-            <ProgressionProvider>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  cardStyle: { backgroundColor: palette.void },
-                }}
-              >
-                <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
-                <Stack.Screen name="settings" />
-                <Stack.Screen name="+not-found" />
-              </Stack>
-            </ProgressionProvider>
+            <AuthProvider>
+              <ProgressionProvider>
+                <AppEffects />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    cardStyle: { backgroundColor: palette.void },
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" options={{ title: APP_NAME }} />
+                  <Stack.Screen name="(auth)/sign-in" />
+                  <Stack.Screen name="settings" />
+                  <Stack.Screen name="+not-found" />
+                </Stack>
+              </ProgressionProvider>
+            </AuthProvider>
           </SplashGate>
         </DbGate>
       </ThemeProvider>

@@ -26,8 +26,15 @@ export interface Theme {
   danger: string;
   warning: string;
   ember: string;
+  mind: string;
+  energy: string;
   xpFill: string;
   xpTrack: string;
+  attrPower: string;
+  attrFocus: string;
+  attrDiscipline: string;
+  attrMind: string;
+  attrEnergy: string;
 }
 
 export const auraTheme: Theme = {
@@ -50,8 +57,15 @@ export const auraTheme: Theme = {
   danger: palette.danger,
   warning: palette.warning,
   ember: palette.ember,
+  mind: palette.mind,
+  energy: palette.energy,
   xpFill: palette.xpFill,
   xpTrack: palette.xpTrack,
+  attrPower: palette.attrPower,
+  attrFocus: palette.attrFocus,
+  attrDiscipline: palette.attrDiscipline,
+  attrMind: palette.attrMind,
+  attrEnergy: palette.attrEnergy,
 };
 
 /** Hook access to the app theme. Swap here when themes become dynamic. */

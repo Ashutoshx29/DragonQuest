@@ -1,6 +1,7 @@
 /**
  * Training challenge programs — content + tuning live here.
  * Runs are tracked in user_challenges; logic in game/engine/challenges.ts.
+ * UI copy uses the training-RPG glossary (mission/objective/ritual).
  * All names/lore are ORIGINAL — generic training-arc flavor only.
  */
 
@@ -23,7 +24,7 @@ export const CHALLENGES: ChallengeDef[] = [
   {
     id: 'iron_week',
     title: 'Iron Week',
-    description: 'One quest a day, seven days straight. Forge the habit of showing up.',
+    description: 'One mission a day, seven days straight. Forge the habit of showing up.',
     durationDays: 7,
     requiredPerDay: 1,
     minHitDays: 7,
@@ -34,7 +35,7 @@ export const CHALLENGES: ChallengeDef[] = [
   {
     id: 'twin_forge',
     title: 'Twin Forge',
-    description: 'Two quests a day for two weeks. Build the rhythm of consistency.',
+    description: 'Two missions a day for two weeks. Build the rhythm of consistency.',
     durationDays: 14,
     requiredPerDay: 2,
     minHitDays: 12,

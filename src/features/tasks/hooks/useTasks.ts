@@ -9,7 +9,7 @@ import {
   type TaskRow,
 } from '@/data/repositories';
 import { useAsync } from '@/hooks/useAsync';
-import { notifyXpChanged } from '@/features/progression/xpEvents';
+import { notifyXpChanged, notifyBoardChanged } from '@/features/progression/xpEvents';
 import { haptic } from '@/services/haptics';
 import { sfx } from '@/services/audio';
 
@@ -40,6 +40,7 @@ export function useTasks(openOnly = false) {
       haptic(result.completed ? 'success' : 'tap');
       if (result.completed) sfx.play('complete');
       notifyXpChanged();
+      notifyBoardChanged();
       reload();
       return result;
     },

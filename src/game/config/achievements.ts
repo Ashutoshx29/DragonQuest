@@ -32,7 +32,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'first_step',
     title: 'First Step',
-    description: 'Complete your first quest',
+    description: 'Complete your first mission',
     tier: 'bronze',
     xpReward: 25,
     icon: 'footsteps',
@@ -41,7 +41,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'ten_done',
     title: 'Warming Up',
-    description: 'Complete 10 quests',
+    description: 'Complete 10 missions',
     tier: 'bronze',
     xpReward: 50,
     icon: 'flame',
@@ -50,7 +50,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'fifty_done',
     title: 'Momentum',
-    description: 'Complete 50 quests',
+    description: 'Complete 50 missions',
     tier: 'silver',
     xpReward: 150,
     icon: 'trending-up',
@@ -59,7 +59,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'hundred_done',
     title: 'Relentless',
-    description: 'Complete 100 quests',
+    description: 'Complete 100 missions',
     tier: 'gold',
     xpReward: 400,
     icon: 'infinite',
@@ -149,7 +149,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'dawn_patrol',
     title: 'Dawn Patrol',
-    description: 'Complete 5 quests before 8am',
+    description: 'Complete 5 missions before 8am',
     tier: 'silver',
     xpReward: 150,
     icon: 'sunny',

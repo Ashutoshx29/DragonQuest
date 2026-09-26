@@ -117,7 +117,7 @@ export default function RoutineDetailScreen() {
         </ThemedText>
         {habitsState.habits.length === 0 ? (
           <ThemedText variant="body" color="textDim">
-            No habits yet — create habits on the Quests tab first.
+            No habits yet — create missions on the Mission Board first.
           </ThemedText>
         ) : (
           habitsState.habits.map((h) => (

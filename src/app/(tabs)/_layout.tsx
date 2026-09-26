@@ -2,17 +2,17 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
 import type { BottomTabNavigationOptions } from 'expo-router/js-tabs';
 
-import { TAB_ROUTES } from '@/constants';
 import { auraTheme } from '@/design-system/theme';
 import { palette } from '@/design-system/tokens';
 
 /**
- * Icon name per tab — keys must match the route file names in src/app/(tabs)/.
+ * Training-RPG navigation: HOME · TRAINING · JOURNAL · PROGRESS · PROFILE.
+ * The full mission board lives at /missions (reached from Home/Training).
  */
-const TAB_ICONS: Record<(typeof TAB_ROUTES)[number], keyof typeof Ionicons.glyphMap> = {
-  today: 'flash',
-  quests: 'shield-checkmark',
+const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  index: 'flash',
   training: 'barbell',
+  journal: 'book',
   progress: 'stats-chart',
   profile: 'person',
 };
@@ -38,9 +38,9 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={tabScreenOptions('Today', TAB_ICONS.today)} />
-      <Tabs.Screen name="quests" options={tabScreenOptions('Quests', TAB_ICONS.quests)} />
+      <Tabs.Screen name="index" options={tabScreenOptions('Home', TAB_ICONS.index)} />
       <Tabs.Screen name="training" options={tabScreenOptions('Training', TAB_ICONS.training)} />
+      <Tabs.Screen name="journal" options={tabScreenOptions('Journal', TAB_ICONS.journal)} />
       <Tabs.Screen name="progress" options={tabScreenOptions('Progress', TAB_ICONS.progress)} />
       <Tabs.Screen name="profile" options={tabScreenOptions('Profile', TAB_ICONS.profile)} />
     </Tabs>

@@ -25,6 +25,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.expo-dev.log
 
 # macOS
 .DS_Store
@@ -43,5 +44,7 @@ example
 /ios
 /android
 
-# drizzle-kit scratch output (migrations are hand-written in src/data/db/migrations)
-drizzle/
+# drizzle-kit scratch output at the repo root only.
+# The generated migration bundle the app imports lives in
+# src/data/db/drizzle/ and MUST be committed.
+/drizzle/

@@ -22,12 +22,21 @@ import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { TaskCard } from '@/features/tasks/components/TaskCard';
 import { useGoals } from '@/features/goals/hooks/useGoals';
 import { getRoutineWithItems } from '@/data/repositories';
+import { useDailyMissions } from '@/features/progression/hooks/useDailyMissions';
+import { MissionCard } from '@/features/progression/components/MissionCard';
 
 type BoardTab = 'habits' | 'routines' | 'tasks' | 'goals';
 
-export default function QuestsScreen() {
+export default function MissionsBoardScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<BoardTab>('habits');
+
+  // The SAME daily-objective source Home uses — one board, no duplication.
+  const daily = useDailyMissions();
+  const handleDailyClaim = async (kind: Parameters<typeof daily.claim>[0]) => {
+    await daily.claim(kind);
+    // Feedback (haptics/sfx/XP toast) is driven by the shared hook.
+  };
 
   const habitsState = useHabits();
   const routinesState = useRoutines();
@@ -82,7 +91,22 @@ export default function QuestsScreen() {
 
   const data =
     tab === 'habits'
-      ? habitsState.habits.map((h) => ({ key: h.id, node: <HabitCard habit={h} onToggle={(id) => void habitsState.toggle(id)} onOpen={openHabit} /> }))
+      ? [
+          // Daily objectives first — the same missions Home shows.
+          ...(daily.board?.missions ?? []).map((m) => ({
+            key: `daily-${m.kind}`,
+            node: (
+              <MissionCard
+                key={m.kind}
+                mission={m}
+                claimed={daily.board?.claimedKinds.includes(m.kind) ?? false}
+                claiming={daily.claiming === m.kind}
+                onClaim={(kind) => void handleDailyClaim(kind)}
+              />
+            ),
+          })),
+          ...habitsState.habits.map((h) => ({ key: h.id, node: <HabitCard habit={h} onToggle={(id) => void habitsState.toggle(id)} onOpen={openHabit} /> })),
+        ]
       : tab === 'routines'
         ? routines.map((r) => ({ key: r.id, node: <RoutineCard routine={r} itemCount={itemCounts[r.id] ?? 0} onPress={openRoutine} /> }))
         : tab === 'goals'
@@ -106,22 +130,22 @@ export default function QuestsScreen() {
   const emptyCopy: Record<BoardTab, { icon: any; title: string; message: string }> = {
     habits: {
       icon: 'flash',
-      title: 'No quests yet',
-      message: 'Habits are your daily training. Create your first one below.',
+      title: 'No missions yet',
+      message: 'Missions are your daily training. Create your first one below.',
     },
     routines: {
       icon: 'layers',
-      title: 'No routines yet',
-      message: 'Routines chain quests into morning or evening sequences.',
+      title: 'No rituals yet',
+      message: 'Rituals chain missions into morning or evening sequences.',
     },
     tasks: {
       icon: 'checkbox',
-      title: 'No tasks yet',
+      title: 'No objectives yet',
       message: 'One-off objectives. Add your first below.',
     },
     goals: {
       icon: 'flag',
-      title: 'No goals yet',
+      title: 'No grand quests yet',
       message: 'Long-term objectives with milestones. Add your first below.',
     },
   };
@@ -130,17 +154,17 @@ export default function QuestsScreen() {
     <Screen edges={['top']}>
       <View style={styles.header}>
         <ThemedText variant="display" color="textBright">
-          Quests
+          Mission Board
         </ThemedText>
         <Badge label={`${habitsState.habits.length} active`} variant="accent" />
       </View>
 
       <SegmentedControl
         options={[
-          { label: 'Habits', value: 'habits' },
-          { label: 'Routines', value: 'routines' },
-          { label: 'Tasks', value: 'tasks' },
-          { label: 'Goals', value: 'goals' },
+          { label: 'Missions', value: 'habits' },
+          { label: 'Rituals', value: 'routines' },
+          { label: 'Objectives', value: 'tasks' },
+          { label: 'Grand Quests', value: 'goals' },
         ]}
         value={tab}
         onChange={setTab}
@@ -162,7 +186,7 @@ export default function QuestsScreen() {
       <View style={styles.quickAdd}>
         <Input
           label=""
-          placeholder={tab === 'tasks' ? 'New task…' : tab === 'goals' ? 'New goal…' : `New ${tab === 'habits' ? 'habit' : 'routine'}…`}
+          placeholder={tab === 'tasks' ? 'New objective…' : tab === 'goals' ? 'New grand quest…' : `New ${tab === 'habits' ? 'mission' : 'ritual'}…`}
           value={quickName}
           onChangeText={setQuickName}
           onSubmitEditing={() => void quickAdd()}

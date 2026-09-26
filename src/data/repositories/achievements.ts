@@ -8,7 +8,7 @@ import { levelFromTotalXp } from '@/game/config/levels';
 import { uuid } from '@/lib/id';
 import { createLogger } from '@/services/logger';
 import { computeStreakFromDays } from '@/game/engine/streaks';
-import { getGlobalStreak } from './globalStreak';
+import { getProgressionSnapshot } from './progression';
 
 const logger = createLogger('achievements-repo');
 
@@ -21,14 +21,8 @@ export interface AchievementView {
 
 /** Build the full stats snapshot the achievement engine needs. */
 export async function getAchievementStats(): Promise<AchievementStats> {
-  const [totals] = await db
-    .select({ total: sql<number>`coalesce(sum(${xpTransactions.amount}), 0)` })
-    .from(xpTransactions);
-
-  const [completions] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(dailyCompletions);
-
+  // XP/completion totals now come from the centralized progression snapshot
+  // (getProgressionSnapshot below) — no duplicated ledger math here.
   const [early] = await db
     .select({ n: sql<number>`count(*)` })
     .from(dailyCompletions)
@@ -55,14 +49,17 @@ export async function getAchievementStats(): Promise<AchievementStats> {
     habitStreakBest = Math.max(habitStreakBest, computeStreakFromDays(days).best);
   }
 
-  const global = await getGlobalStreak();
+  // Best GLOBAL training streak (all-time) from the centralized progression
+  // engine — before this fix the stat reported the CURRENT streak, so Profile
+  // could show "1 DAY SECURED" next to a longest streak of 0.
+  const snapshot = await getProgressionSnapshot();
 
   return {
-    completionsTotal: Number(completions?.n ?? 0),
-    xpTotal: Number(totals?.total ?? 0),
-    level: levelFromTotalXp(Number(totals?.total ?? 0)).level,
+    completionsTotal: snapshot.totalCompletions,
+    xpTotal: snapshot.totalXp,
+    level: levelFromTotalXp(snapshot.totalXp).level,
     habitStreakBest,
-    globalStreakBest: global.current,
+    globalStreakBest: Math.max(snapshot.streak.best, snapshot.streak.current),
     earlyCompletions: Number(early?.n ?? 0),
     habitsCreated: Number(habitsCount?.n ?? 0),
   };

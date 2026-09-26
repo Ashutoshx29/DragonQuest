@@ -11,3 +11,20 @@ export { Sheet } from './Sheet';
 export { SplashGate } from './SplashGate';
 export { ThemedText } from './ThemedText';
 export { ThemedView } from './ThemedView';
+
+// Training-RPG redesign components
+export { AttributeCard } from './AttributeCard';
+export { AchievementCard } from './AchievementCard';
+export { CalendarHistory } from './CalendarHistory';
+export type { CalendarDay, DayMark } from './CalendarHistory';
+export { CharacterAvatar } from './CharacterAvatar';
+export { CharacterHeader } from './CharacterHeader';
+export { DailyQuoteCard, quoteOfTheDay } from './DailyQuoteCard';
+export { LevelBadge } from './LevelBadge';
+export { ProgressChart } from './ProgressChart';
+export type { ChartPoint } from './ProgressChart';
+export { RewardOverlay } from './RewardOverlay';
+export type { RewardInfo, RewardGain } from './RewardOverlay';
+export { StreakBadge } from './StreakBadge';
+export { TrainingCard } from './TrainingCard';
+export { XPBar } from './XPBar';

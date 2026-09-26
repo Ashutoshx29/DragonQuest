@@ -155,8 +155,16 @@ export async function updateHabit(id: string, patch: UpdateHabitInput): Promise<
   await db.update(habits).set(values).where(eq(habits.id, id));
 }
 
+/**
+ * Soft-delete a habit (tombstone). Phase 6: hard deletes cannot be
+ * synchronized (a pulled copy would resurrect), so deletions stamp
+ * archivedAt and let every device converge on the same tombstone.
+ */
 export async function deleteHabit(id: string): Promise<void> {
-  await db.delete(habits).where(eq(habits.id, id));
+  await db
+    .update(habits)
+    .set({ archivedAt: nowIso(), updatedAt: nowIso() })
+    .where(eq(habits.id, id));
 }
 
 export interface ToggleResult {

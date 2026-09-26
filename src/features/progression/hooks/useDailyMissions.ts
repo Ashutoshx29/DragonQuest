@@ -1,14 +1,18 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { claimAllMissionsBonus, claimMission, getMissionBoard, type MissionBoard } from '@/data/repositories';
 import { useAsync } from '@/hooks/useAsync';
-import { notifyXpChanged } from '@/features/progression/xpEvents';
+import { notifyBoardChanged, notifyXpChanged, onBoardChanged } from '@/features/progression/xpEvents';
 import { haptic } from '@/services/haptics';
 import { sfx } from '@/services/audio';
 
 export function useDailyMissions() {
   const { data, loading, error, reload } = useAsync(() => getMissionBoard(), []);
   const [claiming, setClaiming] = useState<string | null>(null);
+
+  // Keep Home and the Mission Board in sync: any habit/task/routine toggle
+  // (from any screen) changes mission completion state, so re-evaluate.
+  useEffect(() => onBoardChanged(reload), [reload]);
 
   const board = data as MissionBoard | null;
 
@@ -23,6 +27,9 @@ export function useDailyMissions() {
           notifyXpChanged();
         }
         reload();
+        // Broadcast so the OTHER view of the same board (Home ↔ Mission
+        // Board) re-evaluates immediately — claim state must match everywhere.
+        notifyBoardChanged();
         return result;
       } finally {
         setClaiming(null);
@@ -41,6 +48,7 @@ export function useDailyMissions() {
         notifyXpChanged();
       }
       reload();
+      notifyBoardChanged();
       return result;
     } finally {
       setClaiming(null);

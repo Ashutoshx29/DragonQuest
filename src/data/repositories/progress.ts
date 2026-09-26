@@ -3,6 +3,7 @@ import { desc, gte, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { dailyCompletions, habits, tasks, xpTransactions } from '../db/schema';
 import { addDays, parseDayString, todayString } from '@/lib/dates';
+import { buildAttributeViews, type AttributeViews } from '@/game/engine/attributes';
 
 export interface XpTotals {
   totalXp: number;
@@ -127,4 +128,23 @@ export async function getStatsOverview(): Promise<StatsOverview> {
     last14,
     activeDaysLast14: last14.filter((d) => d.completions > 0).length,
   };
+}
+
+/**
+ * Attribute views derived from the XP ledger (never persisted).
+ * Keeps every xp_transaction since level 1 — personal-scale data.
+ */
+export async function getAttributeViews(): Promise<AttributeViews> {
+  const today = todayString();
+  const rows = await db
+    .select({
+      source: xpTransactions.source,
+      amount: xpTransactions.amount,
+      createdAt: xpTransactions.createdAt,
+    })
+    .from(xpTransactions);
+  return buildAttributeViews(
+    rows.map((r) => ({ ...r, day: r.createdAt.slice(0, 10) })),
+    today
+  );
 }
