@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   CharacterAvatar,
+  IconButton,
   LevelBadge,
   Screen,
   StreakBadge,
@@ -21,6 +22,9 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useSyncStatus } from '@/features/auth/useSyncStatus';
 import { useAchievements } from '@/features/progression/hooks/useAchievements';
 import { useAttributes } from '@/features/progression/hooks/useAttributes';
+import { AvatarPickerSheet } from '@/features/profile/components/AvatarPickerSheet';
+import { useAvatarStage } from '@/features/profile/hooks/useAvatarStage';
+import { resolveAvatarStage } from '@/game/config/avatar';
 import { countTrainingSessions, getAchievementStats } from '@/data/repositories';
 import { useAsync } from '@/hooks/useAsync';
 
@@ -51,6 +55,11 @@ export default function ProfileScreen() {
     },
     []
   );
+
+  // Avatar customization — local settings KV, no new storage system.
+  const { stage: chosenStage, save: saveStage } = useAvatarStage();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const avatarStage = resolveAvatarStage(chosenStage, levelState?.level);
   const handleSignOut = () => {
     if (confirmSignOut) {
       if (signOutTimer.current) clearTimeout(signOutTimer.current);
@@ -77,7 +86,17 @@ export default function ProfileScreen() {
           style={styles.hero}
         >
           <View style={styles.heroTop}>
-            <CharacterAvatar size={84} stage={levelState && levelState.level >= 15 ? 'gold' : 'aura'} />
+          <View style={styles.avatarWrap}>
+            <CharacterAvatar size={84} stage={avatarStage} />
+            <IconButton
+              icon="brush"
+              label="Change avatar"
+              size={18}
+              color="text"
+              onPress={() => setPickerOpen(true)}
+              style={styles.avatarEdit}
+            />
+          </View>
             <View style={styles.heroId}>
               <ThemedText variant="title" color="textBright">
                 Warrior
@@ -263,6 +282,14 @@ export default function ProfileScreen() {
           onPress={() => router.push('/settings')}
         />
       </ScrollView>
+      <AvatarPickerSheet
+        visible={pickerOpen}
+        current={avatarStage}
+        onSelect={(stage) => {
+          void saveStage(stage);
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
     </Screen>
   );
 }
@@ -315,6 +342,20 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginTop: spacing.sm,
+  },
+  avatarWrap: {
+    width: 84,
+    height: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  avatarEdit: {
+    position: 'absolute',
+    right: -12,
+    bottom: -8,
+    backgroundColor: palette.slate,
+    borderRadius: 999,
   },
   attrList: {
     gap: spacing.sm,

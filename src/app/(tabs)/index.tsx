@@ -9,8 +9,10 @@ import {
   Card,
   CharacterHeader,
   DailyQuoteCard,
+  IconButton,
   RewardOverlay,
   Screen,
+  Sheet,
   ThemedText,
 } from '@/design-system/components';
 import { palette, spacing } from '@/design-system/tokens';
@@ -20,6 +22,9 @@ import { useDailyMissions } from '@/features/progression/hooks/useDailyMissions'
 import { MissionCard } from '@/features/progression/components/MissionCard';
 import { useProgression } from '@/features/progression/ProgressionProvider';
 import { useAttributes } from '@/features/progression/hooks/useAttributes';
+import { useAvatarStage } from '@/features/profile/hooks/useAvatarStage';
+import { resolveAvatarStage } from '@/game/config/avatar';
+import { HelpContent } from '@/features/help/components/HelpContent';
 
 /**
  * HOME — the training command center. Answers "who am I becoming?" at a
@@ -31,6 +36,8 @@ export default function HomeScreen() {
   const { totals, levelState, title, snapshot } = useProgression();
   const missions = useDailyMissions();
   const attributes = useAttributes();
+  const { stage: chosenStage } = useAvatarStage();
+  const avatarStage = resolveAvatarStage(chosenStage, levelState?.level);
   // Streak values come from the SINGLE SOURCE OF TRUTH (no separate query).
   const streak = snapshot?.streak ?? null;
   const [reward, setReward] = useState<{
@@ -38,6 +45,7 @@ export default function HomeScreen() {
     streak: number;
     gains: { attribute: 'discipline'; xp: number }[];
   } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const activeAttributes = attributes
     ? (['power', 'focus', 'discipline', 'mind', 'energy'] as const)
@@ -71,9 +79,29 @@ export default function HomeScreen() {
   return (
     <Screen edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ThemedText variant="caption" color="textDim" style={styles.brandRow}>
-          {`DRAGONQUEST`}
-        </ThemedText>
+        {/* Brand + utility row: ? explains the game (discoverable, quiet),
+            ⚙ keeps the existing Settings entry. */}
+        <View style={styles.brandRow}>
+          <ThemedText variant="caption" color="textDim" style={styles.brandText}>
+            {`DRAGONQUEST`}
+          </ThemedText>
+          <View style={styles.brandActions}>
+            <IconButton
+              icon="help-circle-outline"
+              label="How DragonQuest works"
+              size={22}
+              color="textDim"
+              onPress={() => setHelpOpen(true)}
+            />
+            <IconButton
+              icon="settings-outline"
+              label="Settings"
+              size={22}
+              color="textDim"
+              onPress={() => router.push('/settings')}
+            />
+          </View>
+        </View>
 
         {/* 1. Character / level header */}
         <CharacterHeader
@@ -83,6 +111,7 @@ export default function HomeScreen() {
           streakAtRisk={streak?.atRisk}
           streakDoneToday={streak?.doneToday}
           todayXp={totals?.todayXp}
+          avatarStage={avatarStage}
         />
 
         {/* 2. Today's missions */}
@@ -148,6 +177,14 @@ export default function HomeScreen() {
         />
       </ScrollView>
 
+      <Sheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title="HOW DRAGONQUEST WORKS"
+      >
+        <HelpContent />
+      </Sheet>
+
       {reward ? (
         <RewardOverlay
           info={{
@@ -193,9 +230,19 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  brandText: {
+    flex: 1,
     letterSpacing: 4,
     textAlign: 'center',
-    marginTop: spacing.xs,
+  },
+  brandActions: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
   },
   sectionHeader: {
     flexDirection: 'row',

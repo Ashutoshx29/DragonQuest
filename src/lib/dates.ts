@@ -52,3 +52,15 @@ export function diffDays(a: string, b: string): number {
 export function weekdayOf(day: string): number {
   return parseDayString(day).getDay();
 }
+
+/**
+ * Human-readable long date for a day string, e.g. "Sep 27, 2026" — used
+ * where raw `YYYY-MM-DD` would read like internal metadata to the user.
+ */
+export function formatDayLong(day: string): string {
+  return parseDayString(day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}

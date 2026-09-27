@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   EmptyState,
+  IconButton,
   Input,
   Screen,
   SegmentedControl,
@@ -152,8 +153,16 @@ export default function MissionsBoardScreen() {
 
   return (
     <Screen edges={['top']}>
+      {/* Pushed screen: an always-visible exit is mandatory (HIG) — the header
+          row IS the back affordance, mirroring the detail screens. */}
       <View style={styles.header}>
-        <ThemedText variant="display" color="textBright">
+        <IconButton
+          icon="arrow-back"
+          label="Back"
+          color="text"
+          onPress={() => router.back()}
+        />
+        <ThemedText variant="subheading" color="textBright" style={styles.headerTitle}>
           Mission Board
         </ThemedText>
         <Badge label={`${habitsState.habits.length} active`} variant="accent" />
@@ -203,10 +212,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.xs,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
+  },
+  headerTitle: {
+    flex: 1,
   },
   tabs: {
     marginHorizontal: spacing.lg,

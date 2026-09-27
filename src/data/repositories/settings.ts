@@ -13,6 +13,10 @@ export interface SettingsShape {
   onboarded: boolean;
   /** Dev-only FPS badge (F) — never rendered in release builds. */
   devPerfBadge: boolean;
+  /** Focus-builder: minutes of the last completed focus setup (local only). */
+  lastFocusMinutes: number;
+  /** Chosen avatar visual stage ('ember' | 'aura' | 'gold'); '' = not chosen. */
+  avatarStage: string;
 }
 
 const DEFAULTS: SettingsShape = {
@@ -20,6 +24,8 @@ const DEFAULTS: SettingsShape = {
   haptics: true,
   onboarded: false,
   devPerfBadge: false,
+  lastFocusMinutes: 25,
+  avatarStage: '',
 };
 
 let cache: SettingsShape | null = null;
@@ -29,16 +35,39 @@ export async function getSettings(): Promise<SettingsShape> {
   const rows = await db.select().from(appSettings);
   const stored: Partial<SettingsShape> = {};
   for (const row of rows) {
-    if (row.key in DEFAULTS) {
-      const key = row.key as keyof SettingsShape;
-      stored[key] = row.value === 'true';
+    // Parse explicitly per key — boolean flags and numeric settings share
+    // the same KV table, and each key states its own decode rule.
+    switch (row.key) {
+      case 'sound':
+        stored.sound = row.value === 'true';
+        break;
+      case 'haptics':
+        stored.haptics = row.value === 'true';
+        break;
+      case 'onboarded':
+        stored.onboarded = row.value === 'true';
+        break;
+      case 'devPerfBadge':
+        stored.devPerfBadge = row.value === 'true';
+        break;
+      case 'lastFocusMinutes': {
+        const numeric = Number(row.value);
+        if (Number.isFinite(numeric)) stored.lastFocusMinutes = numeric;
+        break;
+      }
+      case 'avatarStage':
+        stored.avatarStage = row.value;
+        break;
     }
   }
   cache = { ...DEFAULTS, ...stored };
   return cache;
 }
 
-export async function setSetting<K extends keyof SettingsShape>(key: K, value: boolean): Promise<void> {
+export async function setSetting<K extends keyof SettingsShape>(
+  key: K,
+  value: SettingsShape[K]
+): Promise<void> {
   await db
     .insert(appSettings)
     .values({ key, value: String(value) })

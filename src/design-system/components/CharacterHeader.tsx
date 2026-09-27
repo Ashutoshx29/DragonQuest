@@ -9,6 +9,7 @@ import { ThemedText } from './ThemedText';
 import { XPBar } from './XPBar';
 
 import type { LevelState } from '@/game/config/levels';
+import type { Stage } from './CharacterAvatar';
 
 interface CharacterHeaderProps {
   levelState: LevelState | null;
@@ -19,6 +20,8 @@ interface CharacterHeaderProps {
   streakDoneToday?: boolean;
   /** Total XP across all levels (displayed by the bar). */
   todayXp?: number;
+  /** Player-chosen avatar stage (resolver output); falls back to level-derived. */
+  avatarStage?: Stage;
 }
 
 /**
@@ -34,6 +37,7 @@ export function CharacterHeader({
   streakAtRisk,
   streakDoneToday,
   todayXp,
+  avatarStage,
 }: CharacterHeaderProps) {
   return (
     <LinearGradient
@@ -43,7 +47,10 @@ export function CharacterHeader({
       style={styles.panel}
     >
       <View style={styles.topRow}>
-        <CharacterAvatar size={96} stage={levelState && levelState.level >= 15 ? 'gold' : 'aura'} />
+        <CharacterAvatar
+          size={96}
+          stage={avatarStage ?? (levelState && levelState.level >= 15 ? 'gold' : 'aura')}
+        />
         <View style={styles.idBlock}>
           <ThemedText variant="title" color="textBright">
             Warrior

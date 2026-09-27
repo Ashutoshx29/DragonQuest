@@ -9,6 +9,7 @@ import {
   type DayMark,
 } from '@/design-system/components';
 import { spacing } from '@/design-system/tokens';
+import { formatDayLong } from '@/lib/dates';
 import { JournalEditor } from '@/features/journal/components/JournalEditor';
 import { useJournal, type JournalDraft } from '@/features/journal/hooks/useJournal';
 import { getStatsOverview, type StatsOverview } from '@/data/repositories';
@@ -104,22 +105,25 @@ export default function JournalScreen() {
             </ThemedText>
             {journal.history.slice(0, 7).map((e) => (
               <View key={e.id} style={styles.logRow}>
-                <ThemedText variant="caption" color="textFaint">
-                  {e.day}
-                </ThemedText>
-                <ThemedText variant="body" color="textBright" numberOfLines={1} style={styles.logText}>
-                  {e.accomplished || e.learned || e.tomorrowIntent || 'Logged'}
-                </ThemedText>
-                <View style={styles.gauges}>
-                  {[e.mood, e.energy, e.discipline].filter((n): n is number => n != null).length > 0 ? (
+                <View style={styles.logText}>
+                  <ThemedText variant="caption" color="textFaint">
+                    {formatDayLong(e.day)}
+                  </ThemedText>
+                  <ThemedText variant="body" color="textBright" numberOfLines={2}>
+                    {e.accomplished || e.learned || e.tomorrowIntent || 'Logged'}
+                  </ThemedText>
+                  {/* Mood/Energy/Discipline are the user's own 1–5 self-ratings
+                      (same values the editor captures) — show the words, never
+                      the raw letter codes. */}
+                  {e.mood != null || e.energy != null || e.discipline != null ? (
                     <ThemedText variant="caption" color="textDim">
                       {[
-                        e.mood != null ? `M${e.mood}` : null,
-                        e.energy != null ? `E${e.energy}` : null,
-                        e.discipline != null ? `D${e.discipline}` : null,
+                        e.mood != null ? `Mood ${e.mood}/5` : null,
+                        e.energy != null ? `Energy ${e.energy}/5` : null,
+                        e.discipline != null ? `Discipline ${e.discipline}/5` : null,
                       ]
                         .filter(Boolean)
-                        .join(' ')}
+                        .join(' · ')}
                     </ThemedText>
                   ) : null}
                 </View>
@@ -148,16 +152,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
     paddingVertical: spacing.xs,
   },
   logText: {
-    flex: 1,
-  },
-  gauges: {
-    minWidth: 64,
-    alignItems: 'flex-end',
+    gap: 2,
   },
 });

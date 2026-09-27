@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { radius } from '../tokens';
 
-type Stage = 'ember' | 'aura' | 'gold';
+export type Stage = 'ember' | 'aura' | 'gold';
 
 interface CharacterAvatarProps {
   /** Avatar diameter in px. */

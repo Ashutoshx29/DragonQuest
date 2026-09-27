@@ -57,3 +57,7 @@ example
 
 # Supabase CLI local state (project ref, versions) — machine-specific.
 supabase/.temp/
+
+# local device verification captures and scratch scripts
+_device-screen*.png
+scripts/_tmp-*.mjs

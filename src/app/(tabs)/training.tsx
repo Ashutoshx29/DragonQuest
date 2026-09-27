@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -18,12 +18,19 @@ import { CHALLENGES } from '@/game/config/challenges';
 import { useChallenges } from '@/features/progression/hooks/useChallenges';
 import { useTrainingSessions } from '@/features/training/hooks/useTrainingSessions';
 import { TrainingSessionModal } from '@/features/training/components/TrainingSessionModal';
+import { FocusSetupSheet } from '@/features/training/components/FocusSetupSheet';
+import { RecoverySheet } from '@/features/training/components/RecoverySheet';
+import { SessionSummarySheet } from '@/features/training/components/SessionSummarySheet';
 import { WorkoutLogSheet } from '@/features/training/components/WorkoutLogSheet';
 import { RewardOverlay } from '@/design-system/components/RewardOverlay';
 import { TRAINING_KIND_META, type TrainingKind } from '@/data/repositories';
 import { summarizeSessionHistory } from '@/game/engine/sessionHistory';
 import { useProgression } from '@/features/progression/ProgressionProvider';
 import { createLogger } from '@/services/logger';
+import { getSettings, setSetting } from '@/data/repositories/settings';
+import { clampFocusDurationSec } from '@/game/config/training';
+
+import type { BreathPattern } from '@/game/config/breathing';
 
 const logger = createLogger('training-screen');
 
@@ -46,6 +53,20 @@ export default function TrainingScreen() {
   /** Hard idempotency guard: one completion flow per session, ever. */
   const completionInFlightRef = useRef(false);
   const [workoutSheet, setWorkoutSheet] = useState(false);
+  /** Focus/mind session builder — choose duration before the timer opens. */
+  const [setupSheet, setSetupSheet] = useState<{ kind: TrainingKind; initialMinutes: number } | null>(null);
+  /** Remembered focus duration (minutes) — loaded once from settings KV. */
+  const [lastFocusMinutes, setLastFocusMinutes] = useState(25);
+  /** Recovery choice, offered after a focus/mind session completes. */
+  const [recoverySheet, setRecoverySheet] = useState<{ focusMinutes: number } | null>(null);
+  /** Breathing pattern chosen for the pending recovery (null = silent recovery). */
+  const [recoveryPattern, setRecoveryPattern] = useState<BreathPattern | null>(null);
+  /** Composite summary shown after the whole flow ends. */
+  const [summary, setSummary] = useState<{
+    focus: { label: string; minutes: number; xp: number } | null;
+    recovery: { label: string; minutes: number; xp: number } | null;
+    breathingLabel: string | null;
+  } | null>(null);
   /** Persist failure of the completion write — shown on the completed timer
    * face instead of hanging on "Saving…"; the user's run is not lost (they
    * see TRAINING COMPLETE + the error), and sync never touches this path. */
@@ -72,6 +93,44 @@ export default function TrainingScreen() {
     setTimerMinimized(false);
   };
 
+  // Timed kinds route through the SESSION BUILDER (choose duration first);
+  // openTimer stays available for direct preset entry if ever needed.
+  const openSetup = useCallback(
+    (kind: TrainingKind) => {
+      if (kind === 'workout') {
+        setWorkoutSheet(true);
+        return;
+      }
+      setSetupSheet({ kind, initialMinutes: kind === 'focus' ? lastFocusMinutes : 10 });
+    },
+    [lastFocusMinutes]
+  );
+
+  // Remember the last focus duration for the next setup (settings KV —
+  // local-only, no new storage; failure is non-fatal).
+  useEffect(() => {
+    let alive = true;
+    getSettings()
+      .then((s) => {
+        if (alive) setLastFocusMinutes(s.lastFocusMinutes);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const beginFromSetup = (kind: TrainingKind, durationSec: number) => {
+    setSetupSheet(null);
+    if (kind === 'focus') {
+      const minutes = Math.round(durationSec / 60);
+      setLastFocusMinutes(minutes);
+      void setSetting('lastFocusMinutes', minutes).catch(() => {});
+    }
+    setTimer({ kind, durationSec: clampFocusDurationSec(durationSec) });
+    setTimerMinimized(false);
+  };
+
   /**
    * Complete a timed session. IDEMPOTENT: the in-flight ref makes it
    * impossible to double-fire (Finish Early tapped twice, completion racing
@@ -95,6 +154,30 @@ export default function TrainingScreen() {
       }
       setTimer(null);
       setTimerMinimized(false);
+      // Record the phase in the composite summary; after FOCUS/MIND, offer
+      // the optional recovery step (skip is first-class).
+      if (kind === 'focus' || kind === 'mind') {
+        setSummary((prev) => ({
+          focus: {
+            label: TRAINING_KIND_META[kind].label,
+            minutes: Math.max(1, Math.round(elapsedSec / 60)),
+            xp: session.xpAwarded,
+          },
+          recovery: prev?.recovery ?? null,
+          breathingLabel: null,
+        }));
+        setRecoverySheet({ focusMinutes: Math.max(1, Math.round(elapsedSec / 60)) });
+      } else if (kind === 'breath') {
+        setSummary((prev) => ({
+          focus: prev?.focus ?? null,
+          recovery: {
+            label: 'Recovery',
+            minutes: Math.max(1, Math.round(elapsedSec / 60)),
+            xp: session.xpAwarded,
+          },
+          breathingLabel: recoveryPattern?.label ?? prev?.breathingLabel ?? null,
+        }));
+      }
     } catch (err) {
       // Failed LOCAL persist: keep the timer's completed face up and show an
       // honest error + retry. The user's training happened; cloud sync is a
@@ -132,9 +215,11 @@ export default function TrainingScreen() {
     if (nextSession.kind === 'workout') {
       setWorkoutSheet(true);
     } else {
-      openTimer(nextSession.kind);
+      openSetup(nextSession.kind);
     }
   };
+
+  void openTimer;
 
   return (
     <Screen edges={['top']}>
@@ -185,7 +270,7 @@ export default function TrainingScreen() {
               <Card
                 key={kind}
                 compact
-                onPress={() => (kind === 'workout' ? setWorkoutSheet(true) : openTimer(kind))}
+                onPress={() => (kind === 'workout' ? setWorkoutSheet(true) : openSetup(kind))}
                 style={[styles.quickChip, { borderColor: meta.accent }]}
               >
                 <View style={styles.quickInner}>
@@ -299,6 +384,36 @@ export default function TrainingScreen() {
         }}
         onComplete={(sec) => void completeTimer(sec)}
         onMinimize={() => setTimerMinimized(true)}
+      />
+      <FocusSetupSheet
+        visible={!!setupSheet}
+        kind={setupSheet?.kind ?? 'focus'}
+        initialMinutes={setupSheet?.initialMinutes ?? 25}
+        onBegin={(sec) => setupSheet && beginFromSetup(setupSheet.kind, sec)}
+        onClose={() => setSetupSheet(null)}
+      />
+      <RecoverySheet
+        visible={!!recoverySheet}
+        initialPatternId={recoveryPattern?.id ?? null}
+        focusMinutes={recoverySheet?.focusMinutes ?? 0}
+        onBegin={(sec, pattern) => {
+          setRecoveryPattern(pattern);
+          setRecoverySheet(null);
+          setTimer({ kind: 'breath', durationSec: sec });
+          setTimerMinimized(false);
+        }}
+        onClose={() => {
+          setRecoverySheet(null);
+          // Skip (or dismiss) reveals the composite summary if a focus ran.
+          if (summary?.focus) setSummary({ ...summary });
+        }}
+      />
+      <SessionSummarySheet
+        visible={!!summary}
+        focus={summary?.focus ?? null}
+        recovery={summary?.recovery ?? null}
+        breathingLabel={summary?.breathingLabel ?? null}
+        onDismiss={() => setSummary(null)}
       />
       <WorkoutLogSheet
         visible={workoutSheet}
