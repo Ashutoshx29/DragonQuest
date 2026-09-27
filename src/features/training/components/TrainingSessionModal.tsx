@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
+  AppState,
   Modal,
   Pressable,
   StyleSheet,
   View,
-  type LayoutChangeEvent,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -60,16 +60,16 @@ interface TrainingSessionModalProps {
 
 const KIND_META: Record<
   TrainingKind,
-  { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; attribute: string }
+  { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; attribute: string; tag: string }
 > = {
-  workout: { label: 'PHYSICAL TRAINING', icon: 'barbell', color: palette.attrPower, attribute: 'POWER' },
-  focus: { label: 'FOCUS TRAINING', icon: 'timer', color: palette.attrFocus, attribute: 'FOCUS' },
-  mind: { label: 'MIND TRAINING', icon: 'leaf', color: palette.attrMind, attribute: 'MIND' },
-  breath: { label: 'RECOVERY BREATHING', icon: 'water', color: palette.attrEnergy, attribute: 'ENERGY' },
+  workout: { label: 'PHYSICAL TRAINING', icon: 'barbell', color: palette.attrPower, attribute: 'POWER', tag: 'STRENGTH & GRIT' },
+  focus: { label: 'FOCUS TRAINING', icon: 'timer', color: palette.attrFocus, attribute: 'FOCUS', tag: 'DEEP CLARITY' },
+  mind: { label: 'MIND TRAINING', icon: 'leaf', color: palette.attrMind, attribute: 'MIND', tag: 'STILLNESS & AWARENESS' },
+  breath: { label: 'RECOVERY BREATHING', icon: 'water', color: palette.attrEnergy, attribute: 'ENERGY', tag: 'RECHARGE & FLOW' },
 };
 
 /**
- * Full-screen "training mode" surface for timed sessions.
+ * Full-screen immersive "Training Chamber" for timed DragonQuest sessions.
  *
  * Architecture (core behavior unchanged):
  * - Countdown math lives in game/engine/timer.ts and derives from TIMESTAMPS
@@ -79,22 +79,17 @@ const KIND_META: Record<
  * - Rewards come from the single formula (computeTrainingXpPure) — the UI
  *   never duplicates the math.
  *
- * Design:
- * - TRUE CIRCLE by construction: the timer zone is measured (onLayout) and
- *   the ring gets ONE `ringSize` number for width AND height, bounded by the
- *   measured zone and capped for tablets — flexbox can never stretch it.
- * - The progress arc is two half-squares (border trick) clipped to their own
- *   half-window and rotated from -135deg (hidden) to +45deg (full half).
- *   Each half is exactly 180deg of arc, so the fill sweeps clockwise
- *   12 -> 3 -> 6 -> 9 -> 12 with zero overdraw. Pure React Native — no SVG,
- *   no new dependency.
- * - The countdown is the visual hero: kind badge above, session info inside
- *   the ring, reward line below, then primary Finish Early and a tertiary
- *   Abort text link.
- * - Reduced motion (OS setting): looping pulses are replaced by static
- *   styles; state transitions keep short, calm timings.
- * - The start sequence (READY 3 2 1 TRAIN) plays OVER the already-mounted
- *   ring, so the layout never jumps when TRAIN lands.
+ * Major Visual Redesign:
+ * - DEDICATED TRAINING CHRONOMETER: Dominates the viewport with a high-contrast
+ *   circular progress ring, cardinal HUD reticle ticks, and ambient energy pulse.
+ * - COUNTDOWN AS HERO: Massive 84–98px tabular numbers with maximum legibility.
+ * - INTEGRATED TACTICAL HUD: XP yield, attribute category, and real-time training
+ *   pulse consolidated directly into the chronometer composition.
+ * - BALANCED ACTION HIERARCHY: "Finish Early" is a refined secondary action
+ *   rather than a shouting primary CTA; "Abort" is tertiary with confirmation.
+ * - STABLE RESPONSIVE METRICS: Deterministic sizing calculated directly from
+ *   useWindowDimensions() + useSafeAreaInsets() — zero Yoga aspect-ratio stretch,
+ *   zero onLayout measurement jitter.
  */
 export function TrainingSessionModal({
   visible,
@@ -107,29 +102,23 @@ export function TrainingSessionModal({
   submitting = false,
   persistError = null,
 }: TrainingSessionModalProps) {
-  // ── Ring sizing ─────────────────────────────────────────────────────────
-  // Responsive, circular by construction: measured zone provides width and
-  // height. An even integer is strictly enforced so half-windows (ringSize / 2)
-  // never land on subpixel floats that cause seams or clipping on Android.
-  const [zoneSize, setZoneSize] = useState(() => {
-    const win = Dimensions.get('window');
-    return { w: win.width * 0.88, h: win.height * 0.44 };
-  });
-  const onTimerZoneLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setZoneSize((prev) =>
-      Math.abs(prev.w - width) < 1 && Math.abs(prev.h - height) < 1 ? prev : { w: width, h: height }
-    );
-  }, []);
+  // ── Deterministic Viewport-Derived Geometry ────────────────────────────
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = Math.min(windowWidth, windowHeight) >= 600;
 
-  const win = Dimensions.get('window');
-  const isTablet = Math.min(win.width, win.height) >= 600;
-  // Sizing bounded by measured zone and tablet constraints, forced to an even integer
-  const maxRing = isTablet ? 420 : 330;
-  const rawRing = Math.min(zoneSize.w * 0.92, zoneSize.h * 0.92, maxRing);
-  const ringSize = Math.max(220, Math.floor(rawRing / 2) * 2);
-  const ringThickness = Math.max(6, Math.floor(Math.round(ringSize * 0.036) / 2) * 2);
-  const countdownFontSize = Math.min(isTablet ? 96 : 82, Math.round(ringSize * 0.28));
+  // Vertical reservations: Top HUD (~52px) + Tactical Info HUD (~72px) + Footer actions (~90px) + Insets + Padding
+  const verticalBudget = 52 + 72 + 90 + insets.top + insets.bottom + spacing.xl * 2;
+  const usableHeight = Math.max(240, windowHeight - verticalBudget);
+  const usableWidth = Math.max(240, windowWidth - insets.left - insets.right - spacing.xl * 2);
+
+  // Allow the chronometer ring to occupy a dominant portion of the screen without arbitrary tight caps
+  const maxAllowedRing = isTablet ? 460 : 370;
+  const rawRingSize = Math.min(usableWidth * 0.92, usableHeight * 0.94, maxAllowedRing);
+  // Force an even integer to prevent subpixel seams on Android native rendering
+  const ringSize = Math.max(250, Math.floor(rawRingSize / 2) * 2);
+  const ringThickness = Math.max(8, Math.floor(Math.round(ringSize * 0.044) / 2) * 2);
+  const countdownFontSize = Math.min(isTablet ? 98 : 84, Math.round(ringSize * 0.27));
 
   /** Session start timestamp (ms). Lazily initialized ONCE on mount — the
    * host remounts this surface per session via `key`. State (not a ref) so
@@ -137,6 +126,7 @@ export function TrainingSessionModal({
   const [startedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const [confirmAbort, setConfirmAbort] = useState(false);
+  const [earlyFinishElapsed, setEarlyFinishElapsed] = useState<number | null>(null);
   const completedRef = useRef(false);
   const finalTickRef = useRef(0);
   const startPhaseRef = useRef(-1);
@@ -151,16 +141,24 @@ export function TrainingSessionModal({
 
   // Central clock loop: derive `now` from timestamps every 250ms. Reading the
   // wall clock each tick makes the countdown self-correcting after background/
-  // lock/focus loss — no incrementing counter anywhere. The interval keeps
-  // running while minimized (`running`) so resume shows the correct time.
+  // lock/focus loss — no incrementing counter anywhere.
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [running]);
 
+  // Instant AppState clock re-sync on foregrounding: eliminate up to 250ms tick latency
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        setNow(Date.now());
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Start sequence driver — pure beat resolution from elapsed offsets.
-  // Clears the interval once the sequence finishes so it does not tick during 25+ min sessions.
   useEffect(() => {
     if (!visible) return;
     const tick = setInterval(() => {
@@ -185,9 +183,8 @@ export function TrainingSessionModal({
     }
   }, [startBeat]);
 
-  // The countdown BEGINS at the TRAIN beat: while in the start sequence,
-  // timer state is held at 0 elapsed and full duration remaining so it does
-  // not tick down and then snap backwards when the sequence completes.
+  // Countdown BEGINS at the TRAIN beat: while in start sequence,
+  // timer state is held at 0 elapsed and full duration remaining.
   const sequenceOver = now - startedAt >= seqTotal;
   const effectiveStart = startedAt + seqTotal;
 
@@ -200,102 +197,101 @@ export function TrainingSessionModal({
 
   const inStartSequence = startBeat !== null || !sequenceOver;
   const remaining = state.remainingSec;
-  const complete = state.complete && !inStartSequence;
+  const naturalComplete = state.complete && !inStartSequence;
+  const isSessionComplete = naturalComplete || earlyFinishElapsed !== null;
 
   // Completion: fire exactly once, then let the host show the RewardOverlay.
   useEffect(() => {
-    if (!complete || completedRef.current || submitting) return;
+    if (!naturalComplete || completedRef.current || submitting) return;
     completedRef.current = true;
     haptic('levelUp');
     sfx.play('levelUp');
     fireComplete(durationSec);
-    // fireComplete closes over onComplete only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [complete, submitting, durationSec]);
+  }, [naturalComplete, submitting, durationSec]);
 
-  // Final-10-seconds tension: one haptic + sfx tick per second.
+  // Final-10-seconds tension: haptic + sfx tick per second.
   useEffect(() => {
-    if (!state || complete || inStartSequence) return;
+    if (!state || isSessionComplete || inStartSequence) return;
     if (state.remainingSec <= FINAL_STRETCH_SEC && finalTickRef.current !== state.remainingSec) {
       finalTickRef.current = state.remainingSec;
       haptic('tap');
       sfx.play('xp');
     }
-  }, [state, complete, inStartSequence]);
+  }, [state, isSessionComplete, inStartSequence]);
 
-  // ── Progress arc ────────────────────────────────────────────────────────
-  // Animates to the derived fraction each tick; at completion it is driven to
-  // exactly 1 (a full circle) so it never freezes short or overshoots.
-  // Right half covers 0–50%, left half 50–100%; each rotates -135 -> +45deg.
+  // ── Progress Arc Animation (UI Thread) ──────────────────────────────────
   const progress = useSharedValue(0);
   useEffect(() => {
-    const target = complete ? 1 : state?.progress ?? 0;
+    const target = isSessionComplete ? 1 : state?.progress ?? 0;
     progress.value = withTiming(target, {
-      duration: reduceMotion ? 80 : complete ? 400 : 280,
+      duration: reduceMotion ? 80 : isSessionComplete ? 400 : 280,
       easing: Easing.out(Easing.quad),
     });
-  }, [state?.progress, complete, reduceMotion, progress]);
+  }, [state?.progress, isSessionComplete, reduceMotion, progress]);
+
   const rightHalfStyle = useAnimatedStyle(() => {
     const half = Math.min(Math.max(progress.value, 0), 0.5);
     return { transform: [{ rotate: `${-135 + half * 360}deg` }] };
   });
+
   const leftHalfStyle = useAnimatedStyle(() => {
     const half = Math.min(Math.max(progress.value - 0.5, 0), 0.5);
     return { transform: [{ rotate: `${-135 + half * 360}deg` }] };
   });
 
-  // ── Aura ────────────────────────────────────────────────────────────────
-  // One restrained breathing glow behind the ring (kind color, low opacity).
-  // Reduced motion: static dim plate — no loop.
+  // ── Ambient Core Energy Aura ────────────────────────────────────────────
   const auraScale = useSharedValue(1);
-  const auraOpacity = useSharedValue(0.08);
+  const auraOpacity = useSharedValue(0.12);
   useEffect(() => {
     if (reduceMotion) {
       auraScale.value = 1;
-      auraOpacity.value = 0.06;
+      auraOpacity.value = 0.08;
       return;
     }
     auraScale.value = withRepeat(
       withSequence(
-        withTiming(1.06, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
-        withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) })
+        withTiming(1.05, { duration: 1800, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) })
       ),
       -1,
       true
     );
     auraOpacity.value = withRepeat(
       withSequence(
-        withTiming(0.14, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0.08, { duration: 1600, easing: Easing.inOut(Easing.quad) })
+        withTiming(0.2, { duration: 1800, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.1, { duration: 1800, easing: Easing.inOut(Easing.quad) })
       ),
       -1,
       true
     );
   }, [reduceMotion, auraScale, auraOpacity]);
+
   const auraStyle = useAnimatedStyle(() => ({
     transform: [{ scale: auraScale.value }],
     opacity: auraOpacity.value,
   }));
 
-  // ── Status pulse (● IN TRAINING) ────────────────────────────────────────
-  const statusOpacity = useSharedValue(1);
+  // ── Status Pulse Indicator ──────────────────────────────────────────────
+  const statusPulse = useSharedValue(1);
   useEffect(() => {
-    if (reduceMotion || complete) {
-      statusOpacity.value = 1;
+    if (reduceMotion || isSessionComplete) {
+      statusPulse.value = 1;
       return;
     }
-    statusOpacity.value = withRepeat(
+    statusPulse.value = withRepeat(
       withSequence(
-        withTiming(0.4, { duration: 900, easing: Easing.inOut(Easing.quad) }),
-        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) })
+        withTiming(0.35, { duration: 850, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) })
       ),
       -1,
       true
     );
-  }, [reduceMotion, complete, statusOpacity]);
-  const statusStyle = useAnimatedStyle(() => ({ opacity: statusOpacity.value }));
+  }, [reduceMotion, isSessionComplete, statusPulse]);
 
-  // ── Start-sequence beat pop ─────────────────────────────────────────────
+  const statusDotStyle = useAnimatedStyle(() => ({ opacity: statusPulse.value }));
+
+  // ── Start-Sequence Beat Animation ───────────────────────────────────────
   const beatScale = useSharedValue(0.6);
   useEffect(() => {
     if (!startBeat) {
@@ -307,14 +303,15 @@ export function TrainingSessionModal({
       return;
     }
     beatScale.value = 0.6;
-    beatScale.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+    beatScale.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.back(1.5)) });
   }, [startBeat, reduceMotion, beatScale]);
+
   const beatStyle = useAnimatedStyle(() => ({ transform: [{ scale: beatScale.value }] }));
 
   if (!kind) return null;
   const meta = KIND_META[kind];
   const elapsedForDisplay = state?.elapsedSec ?? 0;
-  const inFinalStretch = !complete && !inStartSequence && remaining <= FINAL_STRETCH_SEC;
+  const inFinalStretch = !isSessionComplete && !inStartSequence && remaining <= FINAL_STRETCH_SEC;
 
   const trainedMinutes = Math.round(elapsedForDisplay / 60);
   const canFinishEarly = !inStartSequence && trainedMinutes >= 1;
@@ -326,8 +323,15 @@ export function TrainingSessionModal({
     ? computeTrainingXpPure(kind, trainedMinutes * 60)
     : null;
 
+  const fullSessionXp = computeTrainingXpPure(kind, durationSec);
+  const awardedXp = earlyFinishElapsed !== null
+    ? computeTrainingXpPure(kind, Math.max(1, Math.round(earlyFinishElapsed / 60)) * 60)
+    : fullSessionXp;
+
+  const progressPercent = Math.min(100, Math.round((state?.progress ?? 0) * 100));
+
   const handleFinishEarly = () => {
-    if (completedRef.current || submitting || complete || inStartSequence) return;
+    if (completedRef.current || submitting || isSessionComplete || inStartSequence) return;
     // Require at least 1 rounded minute (>= 30 seconds) of actual training to award XP.
     // Tapping before 30 seconds routes to safe exit without XP or saving, preventing farming exploits.
     if (trainedMinutes < 1) {
@@ -335,13 +339,13 @@ export function TrainingSessionModal({
       onClose();
       return;
     }
+    const elapsedSec = Math.max(0, Math.min(elapsedForDisplay, durationSec));
+    setEarlyFinishElapsed(elapsedSec);
     completedRef.current = true;
     haptic('warning');
-    fireComplete(Math.max(0, Math.min(elapsedForDisplay, durationSec)));
+    fireComplete(elapsedSec);
   };
 
-  /** Fire the completion (natural or finish-early) exactly once per attempt,
-   * remembering the elapsed value so a failed persist can retry identically. */
   const fireComplete = (elapsedSec: number) => {
     lastElapsedRef.current = elapsedSec;
     onComplete(elapsedSec);
@@ -355,85 +359,119 @@ export function TrainingSessionModal({
   };
 
   const handleRequestClose = () => {
-    if (submitting) return; // Prevent abort mid-write
+    if (submitting) return;
     if (confirmAbort) {
-      setConfirmAbort(false); // Dismiss confirmation dialog on back
+      setConfirmAbort(false);
       return;
     }
-    if (complete) {
-      if (persistError) onClose(); // Allow exiting if save failed
+    if (isSessionComplete) {
+      if (persistError) onClose();
       return;
     }
-    setConfirmAbort(true); // Active session: confirm abort
+    setConfirmAbort(true);
   };
 
   return (
     <Modal
       transparent
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={handleRequestClose}
     >
       <View style={styles.root}>
-        {/* Kind-colored top glow — the only decorative gradient, kept subtle */}
+        {/* Immersive Top Atmospheric Glow */}
         <LinearGradient
-          colors={[`${meta.color}18`, 'transparent']}
-          style={styles.topGlow}
+          colors={[`${meta.color}22`, `${meta.color}08`, 'transparent']}
+          style={styles.topAtmosphere}
           pointerEvents="none"
         />
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
-          {/* Hierarchy 1 — Training kind identity (+ quiet minimize) */}
-          <View style={styles.header}>
-            <View style={[styles.kindBadge, { borderColor: `${meta.color}55`, backgroundColor: `${meta.color}14` }]}>
-              <Ionicons name={meta.icon} size={16} color={meta.color} />
-              <ThemedText variant="label" style={{ color: meta.color, letterSpacing: 3, fontWeight: '700' }}>
-                {meta.label}
-              </ThemedText>
+
+        <View
+          style={[
+            styles.container,
+            {
+              paddingTop: Math.max(insets.top, spacing.md),
+              paddingBottom: Math.max(insets.bottom, spacing.md),
+              paddingLeft: Math.max(insets.left, spacing.lg),
+              paddingRight: Math.max(insets.right, spacing.lg),
+            },
+          ]}
+        >
+          {/* ── TOP HUD: Minimalist Tactical Bar ─────────────────────────── */}
+          <View style={styles.topHud}>
+            <View style={styles.hudLeft}>
+              <View style={[styles.disciplineDot, { backgroundColor: meta.color }]} />
+              <View>
+                <ThemedText variant="caption" style={[styles.hudDiscipline, { color: meta.color }]}>
+                  {meta.label}
+                </ThemedText>
+                <ThemedText variant="caption" color="textDim" style={styles.hudTag}>
+                  {meta.tag}
+                </ThemedText>
+              </View>
             </View>
-            {onMinimize && !complete ? (
+
+            {onMinimize && !isSessionComplete ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Continue in background"
-                accessibilityHint="Minimizes the timer; the session keeps running"
+                accessibilityLabel="Dock timer and continue in background"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 onPress={onMinimize}
-                style={styles.minimizeButton}
+                style={({ pressed }) => [styles.minimizeAffordance, pressed && styles.minimizeAffordancePressed]}
               >
-                <Ionicons name="chevron-down" size={22} color={palette.textDim} />
+                <Ionicons name="chevron-down" size={18} color={palette.textDim} />
+                <ThemedText variant="caption" color="textDim" style={styles.minimizeText}>
+                  DOCK
+                </ThemedText>
               </Pressable>
             ) : null}
           </View>
 
-          {/* Hierarchy 2+3 — Countdown Hero + Perfect Circular Progress Ring */}
-          <View style={styles.timerZone} onLayout={onTimerZoneLayout}>
+          {/* ── CENTER: Dominant Training Chronometer ─────────────────────── */}
+          <View style={styles.chronometerViewport}>
             <View
               style={[
-                styles.ringBox,
+                styles.chronometerFrame,
                 {
                   width: ringSize,
                   height: ringSize,
                 },
               ]}
             >
-              {/* Breathing aura behind the ring */}
+              {/* Radial Energy Aura */}
               <Animated.View
                 pointerEvents="none"
                 style={[
-                  styles.aura,
+                  styles.auraGlow,
                   auraStyle,
                   {
-                    width: ringSize + 28,
-                    height: ringSize + 28,
-                    borderRadius: (ringSize + 28) / 2,
+                    width: ringSize + 40,
+                    height: ringSize + 40,
+                    borderRadius: (ringSize + 40) / 2,
                     backgroundColor: meta.color,
                   },
                 ]}
               />
-              {/* Track: full faint circle */}
+
+              {/* Outer Subtle Gauge Bezel */}
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.outerBezel,
+                  {
+                    width: ringSize + 12,
+                    height: ringSize + 12,
+                    borderRadius: (ringSize + 12) / 2,
+                  },
+                ]}
+              />
+
+              {/* Primary Circular Track */}
               <View
                 style={[
-                  styles.ringTrack,
+                  styles.trackRing,
                   {
                     width: ringSize,
                     height: ringSize,
@@ -442,11 +480,18 @@ export function TrainingSessionModal({
                   },
                 ]}
               />
-              {/* Progress arc: left half (50% - 100%) */}
+
+              {/* Cardinal HUD Reticle Ticks (Explicitly Anchored for Android Yoga) */}
+              <View style={[styles.reticleTick, { top: -2, left: (ringSize - 2) / 2, width: 2, height: ringThickness + 4 }]} />
+              <View style={[styles.reticleTick, { bottom: -2, left: (ringSize - 2) / 2, width: 2, height: ringThickness + 4 }]} />
+              <View style={[styles.reticleTick, { left: -2, top: (ringSize - 2) / 2, height: 2, width: ringThickness + 4 }]} />
+              <View style={[styles.reticleTick, { right: -2, top: (ringSize - 2) / 2, height: 2, width: ringThickness + 4 }]} />
+
+              {/* Animated Progress Arc: Left Half (50% - 100%) */}
               <View style={[styles.arcWindow, { left: 0, width: ringSize / 2, height: ringSize }]}>
                 <Animated.View
                   style={[
-                    styles.arcSquareLeft,
+                    styles.arcLeft,
                     leftHalfStyle,
                     {
                       width: ringSize,
@@ -460,11 +505,12 @@ export function TrainingSessionModal({
                   ]}
                 />
               </View>
-              {/* Progress arc: right half (0% - 50%) */}
+
+              {/* Animated Progress Arc: Right Half (0% - 50%) */}
               <View style={[styles.arcWindow, { left: ringSize / 2, width: ringSize / 2, height: ringSize }]}>
                 <Animated.View
                   style={[
-                    styles.arcSquare,
+                    styles.arcRight,
                     rightHalfStyle,
                     {
                       width: ringSize,
@@ -479,38 +525,60 @@ export function TrainingSessionModal({
                 />
               </View>
 
-              {/* Hierarchy 2 — Visual hero countdown inside the ring */}
-              <View style={styles.clockWrap} pointerEvents="none">
+              {/* Central Chronometer Face (Hero Countdown, Accessible to Screen Readers) */}
+              <View style={styles.centerFace}>
+                {/* Upper Inner Discipline Label */}
+                <View style={styles.faceHeader}>
+                  <Ionicons name={meta.icon} size={15} color={meta.color} />
+                  <ThemedText variant="caption" style={[styles.faceHeaderLabel, { color: meta.color }]}>
+                    {meta.attribute} CADENCE
+                  </ThemedText>
+                </View>
+
+                {/* The Hero Countdown Display with Font Scaling Protection */}
                 <ThemedText
                   variant="display"
-                  color="textBright"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  maxFontSizeMultiplier={1.15}
                   accessibilityRole="timer"
                   accessibilityLabel={
-                    complete
-                      ? 'Session complete'
+                    isSessionComplete
+                      ? 'Training complete'
                       : `Time remaining: ${formatCountdown(remaining)}`
                   }
                   style={[
-                    styles.clock,
+                    styles.heroCountdown,
                     {
                       fontSize: countdownFontSize,
                       color: inFinalStretch ? palette.warning : palette.textBright,
                     },
                   ]}
                 >
-                  {complete || !inStartSequence || startBeat ? formatCountdown(remaining) : ''}
+                  {isSessionComplete || !inStartSequence || startBeat ? formatCountdown(remaining) : ''}
                 </ThemedText>
-                <ThemedText variant="caption" color="textDim" style={styles.sessionLabel}>
-                  {sessionLengthLabel(durationSec)}
-                </ThemedText>
+
+                {/* Lower Inner Status / Metrics */}
+                <View style={styles.faceFooter}>
+                  <ThemedText variant="caption" color="textDim" style={styles.faceFooterLabel}>
+                    {isSessionComplete
+                      ? 'GOAL REACHED'
+                      : inStartSequence
+                        ? 'FOCUS MIND'
+                        : `${sessionLengthLabel(durationSec)} · ${progressPercent}%`}
+                  </ThemedText>
+                </View>
               </View>
 
-              {/* Start sequence plays over the ring — layout never jumps */}
+              {/* Start Sequence Beat Overlay ("READY 3 2 1 TRAIN") */}
               {inStartSequence ? (
                 <View style={styles.beatOverlay} pointerEvents="none">
-                  <Animated.View style={[styles.beatWrap, beatStyle]}>
+                  <Animated.View style={[styles.beatCard, beatStyle]}>
                     <ThemedText variant="display" color="textBright" style={styles.beatText}>
                       {startBeat?.label ?? 'READY'}
+                    </ThemedText>
+                    <ThemedText variant="caption" color="textDim" style={styles.beatSub}>
+                      {startBeat?.label === 'TRAIN' ? 'BEGIN YOUR RUN' : 'PREPARE BODY & MIND'}
                     </ThemedText>
                   </Animated.View>
                 </View>
@@ -518,65 +586,81 @@ export function TrainingSessionModal({
             </View>
           </View>
 
-          {/* Hierarchy 4 — Session / XP Information */}
-          <View style={styles.rewardZone}>
+          {/* ── TACTICAL HUD MODULE: XP & Live Status Console ─────────────── */}
+          <View style={styles.tacticalHud}>
             {persistError ? (
-              <View style={styles.errorPill}>
-                <Ionicons name="alert-circle" size={16} color={palette.danger} />
-                <ThemedText variant="caption" style={{ color: palette.danger, textAlign: 'center' }}>
+              <View style={styles.hudError}>
+                <Ionicons name="alert-circle" size={18} color={palette.danger} />
+                <ThemedText variant="caption" style={styles.hudErrorText}>
                   {persistError}
                 </ThemedText>
               </View>
-            ) : complete ? (
-              <View style={[styles.xpPill, { borderColor: `${palette.gold}60`, backgroundColor: `${palette.gold}14` }]}>
-                <Ionicons name="flash" size={16} color={palette.gold} />
-                <ThemedText variant="subheading" color="gold" style={styles.xpText}>
-                  {`+${computeTrainingXpPure(kind, durationSec)} ${meta.attribute} XP EARNED`}
+            ) : isSessionComplete ? (
+              <View style={styles.hudComplete}>
+                <Ionicons name="sparkles" size={18} color={palette.gold} />
+                <ThemedText variant="subheading" color="gold" style={styles.hudCompleteText}>
+                  {`+${awardedXp} ${meta.attribute} XP AWARDED`}
                 </ThemedText>
               </View>
-            ) : inStartSequence ? (
-              <Animated.View style={[styles.statusPill, statusStyle, { borderColor: `${meta.color}40` }]}>
-                <View style={[styles.statusDot, { backgroundColor: meta.color }]} />
-                <ThemedText variant="label" style={{ color: meta.color, letterSpacing: 2 }}>
-                  PREPARING
-                </ThemedText>
-              </Animated.View>
             ) : (
-              <View style={styles.infoRow}>
-                <View style={[styles.xpPill, { borderColor: `${palette.gold}40`, backgroundColor: `${palette.gold}10` }]}>
-                  <Ionicons name="flash" size={14} color={palette.gold} />
-                  <ThemedText variant="label" color="gold" style={styles.xpText}>
-                    {`+${computeTrainingXpPure(kind, durationSec)} ${meta.attribute} XP`}
+              <View style={styles.hudConsole}>
+                {/* Potential / Target XP */}
+                <View style={styles.consoleSegment}>
+                  <ThemedText variant="caption" color="textDim" style={styles.consoleHeader}>
+                    TARGET REWARD
                   </ThemedText>
+                  <View style={styles.consoleValueRow}>
+                    <Ionicons name="flash" size={14} color={palette.gold} />
+                    <ThemedText variant="label" color="gold" style={styles.consoleGoldText}>
+                      {`+${fullSessionXp} ${meta.attribute} XP`}
+                    </ThemedText>
+                  </View>
                 </View>
-                <Animated.View style={[styles.statusPill, statusStyle, { borderColor: `${meta.color}35` }]}>
-                  <View style={[styles.statusDot, { backgroundColor: meta.color }]} />
-                  <ThemedText variant="label" color="textDim" style={styles.statusLabel}>
-                    IN TRAINING
+
+                {/* Tactical Divider */}
+                <View style={styles.consoleDivider} />
+
+                {/* Session Mode & Real-time State */}
+                <View style={styles.consoleSegment}>
+                  <ThemedText variant="caption" color="textDim" style={styles.consoleHeader}>
+                    STATUS
                   </ThemedText>
-                </Animated.View>
+                  <View style={styles.consoleValueRow}>
+                    <Animated.View
+                      style={[
+                        styles.liveDot,
+                        statusDotStyle,
+                        { backgroundColor: inStartSequence ? palette.warning : meta.color },
+                      ]}
+                    />
+                    <ThemedText variant="label" color="textBright" style={styles.consoleStatusText}>
+                      {inStartSequence ? 'INITIALIZING' : 'IN TRAINING'}
+                    </ThemedText>
+                  </View>
+                </View>
               </View>
             )}
           </View>
 
-          {/* Hierarchy 5+6 — Primary action & Secondary actions */}
-          <View style={styles.footer}>
-            {complete ? (
-              <View style={styles.actionColumn}>
-                <View style={styles.completeBanner}>
-                  <ThemedText variant="heading" color="success" style={styles.completeTitle}>
-                    {submitting ? 'SAVING PROGRESS…' : 'TRAINING COMPLETE'}
+          {/* ── ACTION FOOTER: Calibrated Hierarchy ───────────────────────── */}
+          <View style={styles.actionFooter}>
+            {isSessionComplete ? (
+              <View style={styles.completeActions}>
+                <View style={styles.completeCelebration}>
+                  <ThemedText variant="heading" color="success" style={styles.completeHeader}>
+                    {submitting ? 'SAVING SESSION…' : 'TRAINING COMPLETE'}
                   </ThemedText>
                 </View>
+
                 {persistError ? (
-                  <>
+                  <View style={styles.errorButtonStack}>
                     <Button
                       label="Retry save"
                       size="lg"
                       variant="primary"
                       loading={submitting}
                       onPress={() => fireComplete(lastElapsedRef.current)}
-                      style={styles.primaryButton}
+                      style={styles.fullWidthAction}
                       accessibilityHint="Saves the completed session again"
                     />
                     <Button
@@ -585,59 +669,99 @@ export function TrainingSessionModal({
                       variant="ghost"
                       disabled={submitting}
                       onPress={onClose}
-                      style={styles.retryCloseButton}
                       accessibilityHint="Dismisses the modal if saving cannot succeed"
                     />
-                  </>
+                  </View>
                 ) : null}
               </View>
             ) : (
-              <View style={styles.actionColumn}>
-                <Button
-                  label={
-                    submitting
+              <View style={styles.trainingControls}>
+                {/* Secondary: Finish Early (Refined, not screaming for attention) */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPartialPreview
+                      ? `Finish session early for ${partialPreview} XP`
+                      : 'Exit session without XP'
+                  }
+                  disabled={submitting || inStartSequence}
+                  onPress={handleFinishEarly}
+                  style={({ pressed }) => [
+                    styles.secondaryActionPill,
+                    (submitting || inStartSequence) && styles.actionDisabled,
+                    pressed && styles.actionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name={canFinishEarly ? 'checkmark-circle-outline' : 'stop-circle-outline'}
+                    size={18}
+                    color={canFinishEarly ? palette.text : palette.textDim}
+                  />
+                  <ThemedText
+                    variant="label"
+                    style={[styles.secondaryActionText, { color: canFinishEarly ? palette.text : palette.textDim }]}
+                  >
+                    {submitting
                       ? 'Saving…'
                       : showPartialPreview
                         ? `Finish early · +${partialPreview} XP`
-                        : 'Finish early'
-                  }
-                  size="lg"
-                  variant="secondary"
-                  disabled={submitting || inStartSequence}
-                  onPress={handleFinishEarly}
-                  style={styles.primaryButton}
-                  accessibilityHint="Ends the session now and awards XP for the minutes trained"
-                />
+                        : 'Exit session'}
+                  </ThemedText>
+                </Pressable>
+
+                {/* Tertiary: Abort Session with Confirmation */}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Abort session"
-                  accessibilityHint="Ends the session with no reward — asks for confirmation"
+                  accessibilityLabel="Abort training session"
+                  accessibilityHint="Aborts the session with no reward. Prompts for confirmation."
                   disabled={submitting}
+                  hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
                   onPress={() => setConfirmAbort(true)}
-                  style={styles.abortLink}
+                  style={styles.tertiaryAbortAffordance}
                 >
-                  <ThemedText variant="label" style={[styles.abortText, { color: palette.danger }]}>
+                  <ThemedText variant="caption" style={styles.abortText}>
                     Abort Session
                   </ThemedText>
                 </Pressable>
               </View>
             )}
           </View>
-        </SafeAreaView>
+        </View>
 
-        {/* Abort confirmation — accidental taps must not destroy a session */}
+        {/* ── Confirmation Modal Layer (Accidental Tap Protection & A11y Touch Targets) ── */}
         {confirmAbort ? (
-          <View style={styles.confirmLayer} pointerEvents="box-none">
+          <View style={styles.confirmBackdrop}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss confirmation"
+              onPress={() => setConfirmAbort(false)}
+            />
             <View style={styles.confirmCard}>
-              <ThemedText variant="subheading" color="textBright">
-                Abort session?
+              <View style={styles.confirmIconWrap}>
+                <Ionicons name="warning-outline" size={24} color={palette.danger} />
+              </View>
+              <ThemedText variant="subheading" color="textBright" style={styles.confirmTitle}>
+                Abort Training?
               </ThemedText>
-              <ThemedText variant="caption" color="textDim">
-                No XP will be awarded.
+              <ThemedText variant="caption" color="textDim" style={styles.confirmMessage}>
+                Leaving now will discard your progress. No XP will be awarded for this session.
               </ThemedText>
-              <View style={styles.confirmActions}>
-                <Button label="Keep training" size="sm" variant="secondary" onPress={() => setConfirmAbort(false)} />
-                <Button label="Abort" size="sm" variant="danger" onPress={handleAbort} />
+              <View style={styles.confirmButtons}>
+                <Button
+                  label="Keep training"
+                  size="md"
+                  variant="secondary"
+                  onPress={() => setConfirmAbort(false)}
+                  style={styles.confirmFlexBtn}
+                />
+                <Button
+                  label="Abort"
+                  size="md"
+                  variant="danger"
+                  onPress={handleAbort}
+                  style={styles.confirmFlexBtn}
+                />
               </View>
             </View>
           </View>
@@ -652,85 +776,117 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.void,
   },
-  topGlow: {
+  topAtmosphere: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 280,
+    height: 380,
   },
-  safe: {
+  container: {
     flex: 1,
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 540,
     alignSelf: 'center',
+    justifyContent: 'space-between',
+  },
+
+  // ── Top HUD ─────────────────────────────────────────────────────────────
+  topHud: {
+    width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    minHeight: 48,
+    paddingHorizontal: spacing.xs,
   },
-  header: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  kindBadge: {
+  hudLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.round,
-    borderWidth: 1.5,
   },
-  minimizeButton: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: 44,
-    height: 44,
+  disciplineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.round,
+  },
+  hudDiscipline: {
+    fontWeight: '800',
+    letterSpacing: 2.5,
+  },
+  hudTag: {
+    letterSpacing: 1.5,
+    marginTop: 1,
+    fontSize: 10,
+  },
+  minimizeAffordance: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xxs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.round,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  timerZone: {
+  minimizeAffordancePressed: {
+    opacity: 0.6,
+  },
+  minimizeText: {
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    fontSize: 10,
+  },
+
+  // ── Chronometer Viewport ────────────────────────────────────────────────
+  chronometerViewport: {
     flex: 1,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringBox: {
-    aspectRatio: 1,
+  chronometerFrame: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  aura: {
+  auraGlow: {
     position: 'absolute',
   },
-  ringTrack: {
+  outerBezel: {
     position: 'absolute',
-    borderColor: palette.graphite,
-    opacity: 0.35,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  trackRing: {
+    position: 'absolute',
+    borderColor: '#161A24',
+    borderWidth: 10,
+  },
+  reticleTick: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   arcWindow: {
     position: 'absolute',
     top: 0,
     overflow: 'hidden',
   },
-  arcSquare: {
+  arcRight: {
     position: 'absolute',
     top: 0,
     borderLeftColor: 'transparent',
     borderBottomColor: 'transparent',
   },
-  arcSquareLeft: {
+  arcLeft: {
     position: 'absolute',
     top: 0,
     borderRightColor: 'transparent',
     borderTopColor: 'transparent',
   },
-  clockWrap: {
+
+  // ── Central Chronometer Face ────────────────────────────────────────────
+  centerFace: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -738,19 +894,37 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xxs,
+    paddingHorizontal: spacing.md,
   },
-  clock: {
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 2,
+  faceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xxs,
+  },
+  faceHeaderLabel: {
     fontWeight: '800',
+    letterSpacing: 2,
+    fontSize: 11,
+  },
+  heroCountdown: {
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+    fontWeight: '900',
     textAlign: 'center',
+    includeFontPadding: false,
   },
-  sessionLabel: {
-    letterSpacing: 3,
+  faceFooter: {
+    marginTop: spacing.xxs,
+  },
+  faceFooterLabel: {
+    letterSpacing: 2,
     textTransform: 'uppercase',
-    marginTop: spacing.xs,
+    fontWeight: '700',
+    fontSize: 11,
   },
+
+  // ── Start Sequence Beat Overlay ─────────────────────────────────────────
   beatOverlay: {
     position: 'absolute',
     width: '100%',
@@ -758,108 +932,181 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  beatWrap: {
+  beatCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(7, 8, 12, 0.88)',
+    backgroundColor: 'rgba(7, 8, 12, 0.94)',
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.lg,
     borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: palette.line,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    gap: spacing.xxs,
   },
   beatText: {
-    fontSize: 56,
+    fontSize: 60,
     letterSpacing: 8,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-  rewardZone: {
+  beatSub: {
+    letterSpacing: 2.5,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  // ── Tactical HUD Module ─────────────────────────────────────────────────
+  tacticalHud: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
-    marginBottom: spacing.xs,
+    minHeight: 58,
+    marginVertical: spacing.xs,
   },
-  errorPill: {
+  hudConsole: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
-    backgroundColor: `${palette.danger}15`,
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: 'rgba(16, 19, 27, 0.85)',
     borderWidth: 1,
-    borderColor: `${palette.danger}40`,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
-  xpPill: {
+  consoleSegment: {
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  consoleHeader: {
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: '700',
+  },
+  consoleValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  },
+  consoleGoldText: {
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  consoleDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
     borderRadius: radius.round,
-    borderWidth: 1,
   },
-  xpText: {
+  consoleStatusText: {
     letterSpacing: 1.5,
     fontWeight: '700',
   },
-  infoRow: {
+  hudError: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.round,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: `${palette.danger}18`,
     borderWidth: 1,
-    backgroundColor: 'rgba(12, 14, 20, 0.65)',
+    borderColor: `${palette.danger}40`,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
+  hudErrorText: {
+    color: palette.danger,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  hudComplete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
     borderRadius: radius.round,
+    backgroundColor: `${palette.gold}16`,
+    borderWidth: 1,
+    borderColor: `${palette.gold}50`,
   },
-  statusLabel: {
+  hudCompleteText: {
     letterSpacing: 2,
+    fontWeight: '800',
   },
-  footer: {
+
+  // ── Action Footer ───────────────────────────────────────────────────────
+  actionFooter: {
     width: '100%',
     alignItems: 'center',
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.xs,
   },
-  actionColumn: {
+  trainingControls: {
     width: '100%',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  completeBanner: {
+  secondaryActionPill: {
+    width: '100%',
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(22, 26, 36, 0.75)',
+    paddingHorizontal: spacing.lg,
+  },
+  secondaryActionText: {
+    letterSpacing: 1.5,
+    fontWeight: '700',
+  },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  actionPressed: {
+    opacity: 0.75,
+  },
+  tertiaryAbortAffordance: {
+    minHeight: 44,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  abortText: {
+    color: `${palette.danger}CC`,
+    letterSpacing: 2,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  completeActions: {
+    width: '100%',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  completeCelebration: {
     paddingVertical: spacing.xs,
     alignItems: 'center',
   },
-  completeTitle: {
+  completeHeader: {
     letterSpacing: 4,
+    fontWeight: '900',
   },
-  primaryButton: {
-    alignSelf: 'stretch',
+  errorButtonStack: {
+    width: '100%',
+    gap: spacing.sm,
   },
-  retryCloseButton: {
-    alignSelf: 'stretch',
-    marginTop: spacing.xs,
+  fullWidthAction: {
+    width: '100%',
   },
-  abortLink: {
-    minHeight: 44,
-    paddingHorizontal: spacing.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  abortText: {
-    letterSpacing: 2,
-  },
-  confirmLayer: {
+
+  // ── Confirmation Modal ──────────────────────────────────────────────────
+  confirmBackdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -867,22 +1114,43 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(4, 5, 8, 0.65)',
+    backgroundColor: 'rgba(4, 5, 8, 0.82)',
   },
   confirmCard: {
-    width: '86%',
+    width: '88%',
     maxWidth: 340,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: palette.line,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     backgroundColor: palette.night,
     padding: spacing.xl,
     alignItems: 'center',
     gap: spacing.sm,
   },
-  confirmActions: {
+  confirmIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.round,
+    backgroundColor: `${palette.danger}18`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xxs,
+  },
+  confirmTitle: {
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  confirmMessage: {
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  confirmButtons: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
+    width: '100%',
+  },
+  confirmFlexBtn: {
+    flex: 1,
   },
 });
