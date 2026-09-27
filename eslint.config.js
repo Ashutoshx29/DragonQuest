@@ -14,6 +14,9 @@ module.exports = defineConfig([
       // Reanimated's mutable ref and false-positives on every write.
       'react-hooks/immutability': 'off',
     },
+    settings: {
+      'import/core-modules': ['node:sqlite'],
+    },
   },
   {
     ignores: ['dist/*', 'node_modules/*', '.expo/*', '.expo-dev.log', 'scripts/_tmp*'],
