@@ -24,6 +24,7 @@ export default function JournalScreen() {
   const { data: statsData } = useAsync(() => getStatsOverview(), []);
   const stats = statsData as StatsOverview | null;
   const [savedFlash, setSavedFlash] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const calendarDays = useMemo(() => {
     const map: Record<string, DayMark[]> = {};
@@ -36,11 +37,19 @@ export default function JournalScreen() {
     return map;
   }, [journal.markedDays, stats]);
 
+  // Save errors must be VISIBLE and non-destructive: on failure the editor is
+  // not remounted (key only changes when the entry id changes on a successful
+  // reload), so the user's text survives and they can retry.
   const handleSave = async (draft: JournalDraft) => {
-    const { xpAwarded } = await journal.save(draft);
-    if (xpAwarded > 0) {
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 2500);
+    setSaveError(null);
+    try {
+      const { xpAwarded } = await journal.save(draft);
+      if (xpAwarded > 0) {
+        setSavedFlash(true);
+        setTimeout(() => setSavedFlash(false), 2500);
+      }
+    } catch {
+      setSaveError("Couldn't save your entry — your text is kept. Please try again.");
     }
   };
 
@@ -64,6 +73,10 @@ export default function JournalScreen() {
             {savedFlash ? (
               <ThemedText variant="label" color="success">
                 +30 XP · LOGGED
+              </ThemedText>
+            ) : saveError ? (
+              <ThemedText variant="caption" color="danger">
+                {saveError}
               </ThemedText>
             ) : null}
           </View>

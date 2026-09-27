@@ -39,3 +39,79 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+# DragonQuest Agent Workflow
+
+## Required workflow
+
+For every non-trivial task:
+
+1. Inspect the existing architecture before coding.
+2. Prefer the smallest correct change.
+3. Reuse existing components, repositories, hooks, services, and game-engine logic.
+4. Do not create parallel implementations.
+
+### Planning
+
+For multi-file or architectural work:
+
+- establish the goal
+- identify affected systems
+- identify risks
+- define verification criteria
+- implement only after the plan is understood
+
+### UI / UX work
+
+When changing UI, interaction, animation, responsive behavior, or visual design:
+
+- preserve existing design tokens
+- reuse existing components
+- test on the actual device when possible
+- verify accessibility and mobile layout
+- avoid decorative complexity without user value
+
+### After meaningful implementation
+
+Perform an over-engineering review:
+
+- remove unnecessary abstractions
+- remove unnecessary dependencies
+- remove duplicated logic
+- simplify where safe
+- keep security, validation, persistence, and correctness intact
+
+### Code quality review
+
+Before declaring a significant change complete:
+
+- inspect error handling
+- inspect security boundaries
+- inspect auth/RLS behavior
+- inspect data synchronization
+- inspect duplicate/idempotency behavior
+- inspect tests
+- inspect dependency changes
+
+### Verification
+
+Run the smallest relevant verification set, expanding it when the change affects shared systems:
+
+- TypeScript
+- ESLint
+- tests
+- DB smoke tests
+- web export
+- Android export
+- device verification
+
+### Never
+
+- weaken RLS to fix a test
+- suppress TypeScript errors
+- use `any` to hide a type problem
+- duplicate business logic
+- reset databases to hide migration problems
+- delete useful tests to make the suite pass
+- add dependencies without justification
+- move to the next phase with known failing runtime behavior

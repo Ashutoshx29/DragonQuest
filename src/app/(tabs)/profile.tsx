@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -39,6 +40,27 @@ export default function ProfileScreen() {
   const { data: statsData } = useAsync(() => getAchievementStats(), []);
   const { data: sessionCount } = useAsync(() => countTrainingSessions(), []);
   const s = statsData as Awaited<ReturnType<typeof getAchievementStats>> | null;
+
+  // Sign-out is irreversible in the moment (session ends, re-auth required),
+  // so it needs two deliberate taps — no modal component needed.
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const signOutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (signOutTimer.current) clearTimeout(signOutTimer.current);
+    },
+    []
+  );
+  const handleSignOut = () => {
+    if (confirmSignOut) {
+      if (signOutTimer.current) clearTimeout(signOutTimer.current);
+      setConfirmSignOut(false);
+      void auth.signOut();
+      return;
+    }
+    setConfirmSignOut(true);
+    signOutTimer.current = setTimeout(() => setConfirmSignOut(false), 3000);
+  };
 
   // Streak values come from the SINGLE SOURCE OF TRUTH (ProgressionProvider).
   const streak = snapshot?.streak ?? null;
@@ -199,7 +221,7 @@ export default function ProfileScreen() {
                   {syncStatus.syncing
                     ? 'Syncing…'
                     : syncStatus.lastResult && !syncStatus.lastResult.ok
-                      ? 'Sync failed — will retry'
+                      ? "Sync temporarily unavailable. Your progress is saved and we'll retry."
                       : 'Progress synced to your account'}
                 </ThemedText>
                 <Button
@@ -210,7 +232,12 @@ export default function ProfileScreen() {
                   onPress={() => void syncStatus.sync()}
                 />
               </View>
-              <Button label="Sign out" size="sm" variant="ghost" onPress={() => void auth.signOut()} />
+              <Button
+                label={confirmSignOut ? 'Tap again to confirm' : 'Sign out'}
+                size="sm"
+                variant={confirmSignOut ? 'danger' : 'ghost'}
+                onPress={handleSignOut}
+              />
             </>
           ) : (
             <>

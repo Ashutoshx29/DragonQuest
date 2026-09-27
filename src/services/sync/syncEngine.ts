@@ -30,6 +30,18 @@ export interface SyncTableConfig {
   appendOnly: boolean;
   /** Timestamp column used for watermarking / LWW. */
   timestampColumn: 'updated_at' | 'created_at';
+  /**
+   * Natural identity columns for append-only tables whose remote uniqueness
+   * goes beyond the PK. The remote enforces these with unique constraints
+   * (user_achievements → `user_achievements_unique (user_id, achievement_id)`,
+   * daily_completions → `completions_unique_user_day`, mission_claims →
+   * `mission_claims_unique_user_day`). Union merging keys on THESE columns
+   * instead of the surrogate id, so the same logical row re-derived under a
+   * fresh uuid (fresh install, second device, unlock re-evaluated before the
+   * pull lands) is recognized as already synced rather than re-pushed into
+   * the unique constraint (was error 23505).
+   */
+  naturalKey?: string[];
 }
 
 /** The synced tables in push/pull dependency order (parents before children). */
@@ -40,12 +52,12 @@ export const SYNC_TABLES: SyncTableConfig[] = [
   { name: 'routine_items', appendOnly: false, timestampColumn: 'created_at' },
   { name: 'goals', appendOnly: false, timestampColumn: 'updated_at' },
   { name: 'milestones', appendOnly: false, timestampColumn: 'created_at' },
-  { name: 'daily_completions', appendOnly: true, timestampColumn: 'created_at' },
+  { name: 'daily_completions', appendOnly: true, timestampColumn: 'created_at', naturalKey: ['entity_type', 'entity_id', 'day'] },
   { name: 'xp_transactions', appendOnly: true, timestampColumn: 'created_at' },
-  { name: 'mission_claims', appendOnly: true, timestampColumn: 'created_at' },
+  { name: 'mission_claims', appendOnly: true, timestampColumn: 'created_at', naturalKey: ['day', 'kind'] },
   { name: 'training_sessions', appendOnly: true, timestampColumn: 'created_at' },
   { name: 'journal_entries', appendOnly: false, timestampColumn: 'updated_at' },
-  { name: 'user_achievements', appendOnly: true, timestampColumn: 'created_at' },
+  { name: 'user_achievements', appendOnly: true, timestampColumn: 'created_at', naturalKey: ['achievement_id'] },
   { name: 'user_challenges', appendOnly: false, timestampColumn: 'created_at' },
 ];
 
@@ -110,6 +122,23 @@ export interface MergePlan {
 }
 
 /**
+ * The Postgres conflict target for an append-only table's idempotent push
+ * (pure helper, exported for tests). Rows carry client surrogate ids, so the
+ * PRIMARY KEY alone is not enough when the remote ALSO enforces a natural
+ * unique constraint beyond it (user_achievements_unique etc.). Postgres
+ * infers the conflict index from the EXACT column list, so the target must
+ * name the constraint's real columns — user_id (injected into the payload
+ * from the verified session by syncService; RLS `with check` proves it
+ * equals auth.uid()) plus the natural key. `DO NOTHING` on that target turns
+ * a fresh-uuid twin of an already-synced row into a no-op instead of a 23505
+ * that aborted the whole pass.
+ */
+export function remoteConflictTarget(cfg: SyncTableConfig): string {
+  if (!cfg.appendOnly || !cfg.naturalKey) return 'id';
+  return ['user_id', ...cfg.naturalKey].join(',');
+}
+
+/**
  * Full merge for one table (pure): union for append-only ledgers, LWW for
  * mutable rows. Idempotent — merging the same data twice yields no ops.
  */
@@ -122,7 +151,29 @@ export function planTableMerge(
   const remoteById = new Map(remoteRows.map((r) => [r.id, r]));
 
   if (cfg.appendOnly) {
-    // Union: push rows the remote lacks, apply rows the local DB lacks.
+    if (cfg.naturalKey) {
+      // Union on the row's NATURAL identity (see SyncTableConfig.naturalKey).
+      // A row that exists on the other side under a different surrogate id is
+      // already synced: never re-push it (that is exactly what violated
+      // user_achievements_unique with 23505) and never re-apply it locally
+      // (the local schema has the same unique index, so the insert would
+      // throw too). Replay-safe: merging the same data twice yields no ops.
+      const keyCols = cfg.naturalKey;
+      const natural = (r: SyncRow): string => {
+        const parts = keyCols.map((col) => r[col]);
+        // A row missing its natural key can only be identified by id —
+        // defensive; the local schema makes these columns NOT NULL.
+        if (parts.some((p) => p == null)) return `id:${String(r.id)}`;
+        return `nk:${parts.map((p) => String(p)).join('\u0000')}`;
+      };
+      const remoteByNatural = new Map(remoteRows.map((r) => [natural(r), r]));
+      const localByNatural = new Map(localRows.map((r) => [natural(r), r]));
+      const toPush = localRows.filter((r) => !remoteByNatural.has(natural(r)));
+      const toApplyLocal = remoteRows.filter((r) => !localByNatural.has(natural(r)));
+      return { toPush, toApplyLocal };
+    }
+    // Union by surrogate id: push rows the remote lacks, apply rows the
+    // local DB lacks.
     const toPush = localRows.filter((r) => !remoteById.has(r.id));
     const toApplyLocal = remoteRows.filter((r) => !localById.has(r.id));
     return { toPush, toApplyLocal };

@@ -65,6 +65,12 @@ export function TrainingCard({
 
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
+  // The breathing glow must be read inside a worklet — a render-scope read
+  // (`shadowOpacity: glow.value` in a plain style object) triggers the
+  // Reanimated "shared value read during render" warning AND never animates,
+  // since the value is only sampled on re-render.
+  const glowStyle = useAnimatedStyle(() => ({ shadowOpacity: glow.value }));
+
   return (
     <AnimatedPressable
       accessibilityRole="button"
@@ -86,9 +92,9 @@ export function TrainingCard({
       <Animated.View
         style={[
           styles.panel,
+          glowStyle,
           {
             shadowColor: accent,
-            shadowOpacity: glow.value,
             shadowRadius: 18,
             shadowOffset: { width: 0, height: 0 },
           },

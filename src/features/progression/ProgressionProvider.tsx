@@ -51,8 +51,14 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
   const lastTotalRef = useRef<number | null>(null);
   const toastKeyRef = useRef(0);
   const mountedRef = useRef(true);
+  /** Coalescing guards: burst notifications (habit-toggle storms, sync
+   * pulls) collapse into ONE snapshot+achievement evaluation instead of one
+   * per event — the pipeline is query-heavy, and N rapid notifies only need
+   * a single refresh AFTER the last of them lands. */
+  const refreshQueuedRef = useRef(false);
+  const refreshRunningRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const runRefresh = useCallback(async () => {
     const next = await getProgressionSnapshot();
     if (!mountedRef.current) return;
     setSnapshot(next);
@@ -85,6 +91,26 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
     lastLevelRef.current = state.level;
   }, []);
 
+  /** Public refresh: coalesces bursts into one run (see the guards above). */
+  const refresh = useCallback(async () => {
+    // A refresh already in flight + another requested ⇒ queue exactly one
+    // follow-up; when the running pass finishes, it re-runs with fresh data.
+    if (refreshRunningRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+    refreshRunningRef.current = true;
+    try {
+      await runRefresh();
+    } finally {
+      refreshRunningRef.current = false;
+      if (refreshQueuedRef.current) {
+        refreshQueuedRef.current = false;
+        void refresh();
+      }
+    }
+  }, [runRefresh]);
+
   useEffect(() => {
     mountedRef.current = true;
     // Apply persisted feedback settings at startup.
@@ -94,7 +120,7 @@ export function ProgressionProvider({ children }: { children: React.ReactNode })
     });
     void refresh();
     const unsubscribe = onXpChanged(() => {
-      void refresh();
+      void refresh(); // coalesced — see refreshQueuedRef above
     });
     return () => {
       mountedRef.current = false;

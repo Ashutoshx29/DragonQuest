@@ -11,12 +11,15 @@ export interface SettingsShape {
   sound: boolean;
   haptics: boolean;
   onboarded: boolean;
+  /** Dev-only FPS badge (F) — never rendered in release builds. */
+  devPerfBadge: boolean;
 }
 
 const DEFAULTS: SettingsShape = {
   sound: true,
   haptics: true,
   onboarded: false,
+  devPerfBadge: false,
 };
 
 let cache: SettingsShape | null = null;

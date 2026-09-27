@@ -67,6 +67,39 @@ describe('deriveTimerState (timestamp-driven countdown)', () => {
     const zero = deriveTimerState(t0, 0, t0);
     expect(zero.remainingSec).toBe(0);
     expect(zero.progress).toBe(0);
+    expect(zero.complete).toBe(false);
+
+    const negative = deriveTimerState(t0, -50, t0);
+    expect(negative.remainingSec).toBe(0);
+    expect(negative.progress).toBe(0);
+    expect(negative.complete).toBe(false);
+  });
+
+  it('calculates progress math accurately at exact fractional milestones', () => {
+    const t0 = 1_000_000;
+    // 0%
+    expect(deriveTimerState(t0, 1000, t0).progress).toBe(0);
+    // 25%
+    expect(deriveTimerState(t0, 1000, t0 + 250_000).progress).toBeCloseTo(0.25);
+    // 50%
+    expect(deriveTimerState(t0, 1000, t0 + 500_000).progress).toBeCloseTo(0.5);
+    // 75%
+    expect(deriveTimerState(t0, 1000, t0 + 750_000).progress).toBeCloseTo(0.75);
+    // 100%
+    expect(deriveTimerState(t0, 1000, t0 + 1_000_000).progress).toBe(1);
+    // Clamped past 100%
+    expect(deriveTimerState(t0, 1000, t0 + 2_000_000).progress).toBe(1);
+  });
+
+  it('handles subsecond precision: 1ms left rounds to 1s remaining, 0ms completes', () => {
+    const t0 = 1_000_000;
+    const oneMsLeft = deriveTimerState(t0, 10, t0 + 10_000 - 1);
+    expect(oneMsLeft.remainingSec).toBe(1);
+    expect(oneMsLeft.complete).toBe(false);
+
+    const zeroMsLeft = deriveTimerState(t0, 10, t0 + 10_000);
+    expect(zeroMsLeft.remainingSec).toBe(0);
+    expect(zeroMsLeft.complete).toBe(true);
   });
 });
 

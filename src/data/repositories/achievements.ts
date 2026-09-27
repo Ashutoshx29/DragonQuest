@@ -101,12 +101,27 @@ export async function checkAndUnlockAchievements(): Promise<AchievementDef[]> {
   if (newUnlocks.length === 0) return [];
 
   const now = new Date().toISOString();
+  // Only achievements whose unlock row ACTUALLY landed (see below) are
+  // returned, so the reveal ceremony can never double-fire for a duplicate.
+  const revealed: AchievementDef[] = [];
   for (const def of newUnlocks) {
-    await db.insert(userAchievements).values({
-      id: uuid(),
-      achievementId: def.id,
-      unlockedAt: now,
-    });
+    // Idempotent + race-safe unlock: onConflictDoNothing on the LOCAL
+    // user_achievements_unique index means two overlapping evaluations (XP
+    // notifications racing, pull + local unlock) can never double-insert —
+    // the second write is a silent no-op. The XP ledger row is ONLY written
+    // when this call's insert actually landed (returning() is empty on a
+    // conflict), so the achievement's xpReward can never be awarded twice.
+    // A pulled twin from another device lands here as a no-op too — exactly
+    // once, enforced by the constraint, on both sides.
+    const inserted = await db
+      .insert(userAchievements)
+      .values({ id: uuid(), achievementId: def.id, unlockedAt: now })
+      .onConflictDoNothing({ target: userAchievements.achievementId })
+      .returning({ id: userAchievements.id });
+    if (inserted.length === 0) {
+      logger.warn(`achievement ${def.id} already unlocked; skipping duplicate XP`);
+      continue;
+    }
     await db.insert(xpTransactions).values({
       id: uuid(),
       amount: def.xpReward,
@@ -116,6 +131,7 @@ export async function checkAndUnlockAchievements(): Promise<AchievementDef[]> {
       createdAt: now,
     });
     logger.info(`achievement unlocked: ${def.id} (+${def.xpReward} xp)`);
+    revealed.push(def);
   }
-  return newUnlocks;
+  return revealed;
 }

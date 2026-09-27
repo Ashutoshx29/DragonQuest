@@ -92,12 +92,31 @@ const insAch = db.prepare(
 );
 insAch.run('ua1', 'first_blood', now);
 try {
+  // THE 23505 ROOT CAUSE (remote equivalent): the same achievement arriving
+  // under a DIFFERENT client-generated uuid violates the unique index —
+  // exactly what the old id-only push did to user_achievements_unique.
   insAch.run('ua2', 'first_blood', now);
   console.error('FAIL: duplicate achievement unlock allowed');
   process.exit(1);
 } catch {
   console.log('OK: user_achievements unique achievement_id enforced');
 }
+
+// Sync-layer idempotency (mirrors the fixed push behavior): a twin under a
+// fresh uuid must be a no-op (INSERT OR IGNORE — the SQLite analogue of
+// PostgREST `on_conflict=user_id,achievement_id` + DO NOTHING), never an
+// error, and must not duplicate XP-bearing rows.
+const twinIgnored = db
+  .prepare(
+    "INSERT OR IGNORE INTO user_achievements (id, achievement_id, unlocked_at) VALUES ('ua3', 'first_blood', ?)"
+  )
+  .run(now);
+const achCount = db.prepare('SELECT COUNT(*) AS n FROM user_achievements').get();
+if (Number(achCount.n) !== 1 || Number(twinIgnored.changes) !== 0) {
+  console.error('FAIL: natural-key twin was not absorbed as a no-op');
+  process.exit(1);
+}
+console.log('OK: user_achievements natural-key twin absorbed (INSERT OR IGNORE)');
 db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run('sound', 'on');
 console.log('OK: app_settings KV works');
 

@@ -3,6 +3,7 @@ import {
   advanceCursor,
   lwwWinner,
   planTableMerge,
+  remoteConflictTarget,
   selectRowsToPull,
   selectRowsToPush,
   totalPreviewItems,
@@ -87,6 +88,65 @@ describe('planTableMerge', () => {
     expect(plan.toApplyLocal.map((r) => r.id)).toEqual(['b']);
   });
 
+  it('user_achievements: natural-key twin (different id, same achievement) does NOT re-push or re-apply', () => {
+    // THE 23505 REGRESSION: the device unlocked an achievement, the remote
+    // already had it under a different client-generated uuid, and the old
+    // id-only union merge pushed the twin into user_achievements_unique.
+    const cfg = SYNC_TABLES.find((t) => t.name === 'user_achievements')!;
+    const localTwin = { id: 'local-uuid', achievement_id: 'first_step', unlocked_at: '2026-09-26T10:00:00Z' };
+    const remoteTwin = { id: 'remote-uuid', user_id: 'u1', achievement_id: 'first_step', unlocked_at: '2026-09-26T09:00:00Z' };
+    const plan = planTableMerge(cfg, [localTwin], [remoteTwin]);
+    expect(plan.toPush).toHaveLength(0); // nothing re-pushed → no 23505
+    expect(plan.toApplyLocal).toHaveLength(0); // nothing re-applied → no local unique throw
+  });
+
+  it('user_achievements: genuinely new achievements still push/pull', () => {
+    const cfg = SYNC_TABLES.find((t) => t.name === 'user_achievements')!;
+    const local = { id: 'l1', achievement_id: 'first_step', unlocked_at: '2026-09-26T10:00:00Z' };
+    const remote = { id: 'r1', user_id: 'u1', achievement_id: 'ten_done', unlocked_at: '2026-09-26T09:00:00Z' };
+    const plan = planTableMerge(cfg, [local], [remote]);
+    expect(plan.toPush.map((r) => r.id)).toEqual(['l1']);
+    expect(plan.toApplyLocal.map((r) => r.id)).toEqual(['r1']);
+  });
+
+  it('user_achievements: replaying the same merge is a no-op (idempotency)', () => {
+    const cfg = SYNC_TABLES.find((t) => t.name === 'user_achievements')!;
+    const local = { id: 'l1', achievement_id: 'first_step', unlocked_at: '2026-09-26T10:00:00Z' };
+    const remote = { id: 'r1', user_id: 'u1', achievement_id: 'ten_done', unlocked_at: '2026-09-26T09:00:00Z' };
+    const first = planTableMerge(cfg, [local], [remote]);
+    // After pass 1, both sides have both rows (under their own ids).
+    const both = [local, remote];
+    const second = planTableMerge(cfg, both, both);
+    expect(second.toPush).toHaveLength(0);
+    expect(second.toApplyLocal).toHaveLength(0);
+    void first;
+  });
+
+  it('daily_completions and mission_claims also merge on their natural keys', () => {
+    const completions = SYNC_TABLES.find((t) => t.name === 'daily_completions')!;
+    const claims = SYNC_TABLES.find((t) => t.name === 'mission_claims')!;
+    const localComp = { id: 'lc1', entity_type: 'habit', entity_id: 'h1', day: '2026-09-26' };
+    const remoteComp = { id: 'rc1', user_id: 'u1', entity_type: 'habit', entity_id: 'h1', day: '2026-09-26' };
+    const planC = planTableMerge(completions, [localComp], [remoteComp]);
+    expect(planC.toPush).toHaveLength(0);
+    expect(planC.toApplyLocal).toHaveLength(0);
+
+    const localClaim = { id: 'lk1', day: '2026-09-26', kind: 'any_three' };
+    const remoteClaim = { id: 'rk1', user_id: 'u1', day: '2026-09-26', kind: 'any_three' };
+    const planK = planTableMerge(claims, [localClaim], [remoteClaim]);
+    expect(planK.toPush).toHaveLength(0);
+    expect(planK.toApplyLocal).toHaveLength(0);
+  });
+
+  it('rows missing their natural key fall back to id identity (defensive)', () => {
+    const cfg = SYNC_TABLES.find((t) => t.name === 'user_achievements')!;
+    const local = { id: 'l1' };
+    const remote = { id: 'l1' }; // same id, no achievement_id
+    const plan = planTableMerge(cfg, [local], [remote]);
+    expect(plan.toPush).toHaveLength(0);
+    expect(plan.toApplyLocal).toHaveLength(0);
+  });
+
   it('is idempotent: merging the same data twice yields no ops', () => {
     const local = [row('a', '2026-01-02T00:00:00Z')];
     const remote = [row('a', '2026-01-02T00:00:00Z')];
@@ -96,6 +156,38 @@ describe('planTableMerge', () => {
     const ledgerPlan = planTableMerge(ledger, local, remote);
     expect(ledgerPlan.toPush).toHaveLength(0);
     expect(ledgerPlan.toApplyLocal).toHaveLength(0);
+  });
+});
+
+describe('conflict targets (idempotency at the DB layer)', () => {
+  it('push target names the remote constraint columns for natural-key ledgers', () => {
+    const achievements = SYNC_TABLES.find((t) => t.name === 'user_achievements')!;
+    // Must match user_achievements_unique (user_id, achievement_id) EXACTLY —
+    // Postgres infers the conflict index from the column list.
+    expect(remoteConflictTarget(achievements)).toBe('user_id,achievement_id');
+    const completions = SYNC_TABLES.find((t) => t.name === 'daily_completions')!;
+    expect(remoteConflictTarget(completions)).toBe('user_id,entity_type,entity_id,day');
+    const claims = SYNC_TABLES.find((t) => t.name === 'mission_claims')!;
+    expect(remoteConflictTarget(claims)).toBe('user_id,day,kind');
+  });
+
+  it('push target is the plain PK for id-only tables', () => {
+    const ledger = SYNC_TABLES.find((t) => t.name === 'xp_transactions')!;
+    expect(remoteConflictTarget(ledger)).toBe('id');
+    const mutable = SYNC_TABLES.find((t) => t.name === 'habits')!;
+    expect(remoteConflictTarget(mutable)).toBe('id');
+  });
+
+  it('every append-only table with a remote unique constraint declares a natural key', () => {
+    // The 23505 class: any append-only table whose remote schema adds a
+    // unique index beyond the PK must opt in — a missing naturalKey would
+    // re-introduce duplicate-twin pushes.
+    const withRemoteUnique = new Set(['daily_completions', 'mission_claims', 'user_achievements']);
+    for (const t of SYNC_TABLES) {
+      if (t.appendOnly && withRemoteUnique.has(t.name)) {
+        expect(t.naturalKey).toBeDefined();
+      }
+    }
   });
 });
 

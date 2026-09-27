@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '../db/client';
 import { dailyCompletions, userChallenges, xpTransactions } from '../db/schema';
@@ -106,13 +106,17 @@ export async function abandonChallenge(runId: string): Promise<void> {
 
 /** Reward a completed run exactly once (called by the sync/check helper). */
 export async function rewardCompletedRun(runId: string, def: ChallengeDef): Promise<boolean> {
-  const [run] = await db.select().from(userChallenges).where(eq(userChallenges.id, runId)).limit(1);
-  if (!run || run.status !== 'active') return false;
-
-  await db
+  // ATOMIC claim: the conditional update (…AND status='active') transitions
+  // the row at most once — two overlapping reward calls can never both win,
+  // so the XP ledger row is inserted only for the caller whose update
+  // actually landed (same pattern as the idempotent achievement unlock).
+  const claimed = await db
     .update(userChallenges)
     .set({ status: 'completed', finishedDay: todayString() })
-    .where(eq(userChallenges.id, runId));
+    .where(and(eq(userChallenges.id, runId), eq(userChallenges.status, 'active')))
+    .returning({ id: userChallenges.id });
+  if (claimed.length === 0) return false;
+
   await db.insert(xpTransactions).values({
     id: uuid(),
     amount: def.xpReward,

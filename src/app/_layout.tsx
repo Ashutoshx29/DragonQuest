@@ -1,4 +1,5 @@
 import { DarkTheme, ThemeProvider } from 'expo-router';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router/js-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +9,8 @@ import { DbGate } from '@/data/db/DbGate';
 import { SplashGate } from '@/design-system/components';
 import { palette } from '@/design-system/tokens';
 import { AuthProvider } from '@/features/auth/AuthProvider';
+import { getSettings } from '@/data/repositories';
+import { DevPerfBadge, setDevPerfVisible } from '@/services/devPerf';
 import { useSyncTriggers } from '@/services/sync/syncTriggers';
 import { ProgressionProvider } from '@/features/progression/ProgressionProvider';
 
@@ -30,7 +33,21 @@ const navigationTheme = {
 /** Root-level side effects that need auth + progression contexts. */
 function AppEffects() {
   useSyncTriggers();
-  return null;
+
+  // F: dev-only FPS badge — restore the persisted toggle once at startup;
+  // the badge itself subscribes to live changes from Settings. Release
+  // builds never render it (__DEV__ gate inside the component).
+  useEffect(() => {
+    if (!__DEV__) return;
+    let alive = true;
+    void getSettings().then((s) => {
+      if (alive) setDevPerfVisible(s.devPerfBadge);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return <DevPerfBadge />;
 }
 
 export default function RootLayout() {

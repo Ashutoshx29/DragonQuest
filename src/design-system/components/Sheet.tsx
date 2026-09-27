@@ -1,4 +1,4 @@
-import { Modal, ModalProps, StyleSheet, View, ViewStyle } from 'react-native';
+import { Modal, ModalProps, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { useAppTheme } from '../theme';
 import { palette, radius, spacing } from '../tokens';
@@ -10,31 +10,42 @@ interface SheetProps extends Pick<ModalProps, 'onRequestClose'> {
   onClose: () => void;
   /** Optional centered title row */
   title?: string;
+  /** Optional leading action (e.g. back button) */
+  headerLeft?: React.ReactNode;
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
  * Bottom sheet built on RN Modal — no extra native deps.
- * Backdrop tap and hardware back both call onClose.
+ * Backdrop tap and hardware back both route through onRequestClose or onClose.
  */
-export function Sheet({ visible, onClose, title, children, style }: SheetProps) {
+export function Sheet({ visible, onClose, onRequestClose, title, headerLeft, children, style }: SheetProps) {
   const theme = useAppTheme();
+  const handleDismiss = onRequestClose ?? onClose;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleDismiss}>
       <View style={styles.backdrop}>
-        <View style={StyleSheet.absoluteFill} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={handleDismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss sheet"
+        />
         <ThemedView
           surface="surface"
           style={[styles.panel, { borderColor: theme.border }, style]}
         >
           <View style={[styles.handle, { backgroundColor: palette.graphite }]} />
-          {title ? (
-            <View style={styles.header}>
-              <ThemedText variant="subheading" color="textBright">
-                {title}
-              </ThemedText>
+          {title || headerLeft ? (
+            <View style={headerLeft ? styles.headerWithLeft : styles.header}>
+              {headerLeft ? <View style={styles.headerLeft}>{headerLeft}</View> : null}
+              {title ? (
+                <ThemedText variant="subheading" color="textBright" style={headerLeft ? styles.headerTitleWithLeft : undefined}>
+                  {title}
+                </ThemedText>
+              ) : null}
             </View>
           ) : null}
           {children}
@@ -51,6 +62,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(4, 5, 8, 0.6)',
   },
   panel: {
+    maxHeight: '90%',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderTopWidth: 1,
@@ -67,5 +79,19 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  headerWithLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+  },
+  headerLeft: {
+    marginLeft: -spacing.xs,
+  },
+  headerTitleWithLeft: {
+    flex: 1,
   },
 });

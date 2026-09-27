@@ -23,6 +23,9 @@ import { RewardOverlay } from '@/design-system/components/RewardOverlay';
 import { TRAINING_KIND_META, type TrainingKind } from '@/data/repositories';
 import { summarizeSessionHistory } from '@/game/engine/sessionHistory';
 import { useProgression } from '@/features/progression/ProgressionProvider';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('training-screen');
 
 /**
  * TRAINING CENTER — the dojo. NEXT TRAINING dominates: what to do, how long,
@@ -43,6 +46,10 @@ export default function TrainingScreen() {
   /** Hard idempotency guard: one completion flow per session, ever. */
   const completionInFlightRef = useRef(false);
   const [workoutSheet, setWorkoutSheet] = useState(false);
+  /** Persist failure of the completion write — shown on the completed timer
+   * face instead of hanging on "Saving…"; the user's run is not lost (they
+   * see TRAINING COMPLETE + the error), and sync never touches this path. */
+  const [persistError, setPersistError] = useState<string | null>(null);
   const [reward, setReward] = useState<{
     xp: number;
     gains: { attribute: 'power' | 'focus' | 'mind' | 'energy'; xp: number }[];
@@ -68,14 +75,17 @@ export default function TrainingScreen() {
   /**
    * Complete a timed session. IDEMPOTENT: the in-flight ref makes it
    * impossible to double-fire (Finish Early tapped twice, completion racing
-   * with Finish Early, etc.). XP comes from the repository's single formula;
-   * the timer stays visible in its TRAINING COMPLETE state until the
-   * RewardOverlay takes over — completion is never a silent close.
+   * with Finish Early, retry racing a natural completion…). XP comes from
+   * the repository's single formula; the timer stays visible in its
+   * completed state until success closes it — completion is never a silent
+   * close, and a failed local persist shows an honest retry instead of
+   * hanging on "Saving…".
    */
   const completeTimer = async (elapsedSec: number) => {
     if (!timer || completionInFlightRef.current) return;
     completionInFlightRef.current = true;
     setSubmitting(true);
+    setPersistError(null);
     const { kind } = timer;
     try {
       const session = await training.complete(kind, { durationSec: elapsedSec });
@@ -83,9 +93,15 @@ export default function TrainingScreen() {
         const attr = TRAINING_KIND_META[kind].attribute;
         setReward({ xp: session.xpAwarded, gains: [{ attribute: attr, xp: session.xpAwarded }] });
       }
-    } finally {
       setTimer(null);
       setTimerMinimized(false);
+    } catch (err) {
+      // Failed LOCAL persist: keep the timer's completed face up and show an
+      // honest error + retry. The user's training happened; cloud sync is a
+      // separate idempotent pipeline and never affects this path.
+      logger.error('training completion persist failed', err);
+      setPersistError('Could not save this session. Your training is kept — retry the save.');
+    } finally {
       setSubmitting(false);
       completionInFlightRef.current = false;
     }
@@ -275,9 +291,11 @@ export default function TrainingScreen() {
         kind={timer?.kind ?? null}
         durationSec={timer?.durationSec ?? 0}
         submitting={submitting}
+        persistError={persistError}
         onClose={() => {
           setTimer(null);
           setTimerMinimized(false);
+          setPersistError(null);
         }}
         onComplete={(sec) => void completeTimer(sec)}
         onMinimize={() => setTimerMinimized(true)}

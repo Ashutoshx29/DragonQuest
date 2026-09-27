@@ -93,35 +93,17 @@ export async function listJournalEntries(limit = 60): Promise<JournalEntry[]> {
  * caller (hook layer) can fire XP-change notifications / reward feedback.
  * The ledger reward lands on first save of the day only; later edits never
  * re-award. XP source 'journal' maps to attribute MIND.
+ *
+ * ATOMIC first-save claim: the insert carries ON CONFLICT(day) DO NOTHING,
+ * so two overlapping saves of the same day (double-tap race) can never both
+ * create the row — `returning()` is empty for the loser, and ONLY the caller
+ * whose insert landed awards the +30 XP (same pattern as the idempotent
+ * achievement unlock). No pre-select needed.
  */
 export async function saveJournalEntry(
   input: SaveJournalInput
 ): Promise<{ entry: JournalEntry; xpAwarded: number }> {
   const now = nowIso();
-  const [existing] = await db
-    .select()
-    .from(journalEntries)
-    .where(eq(journalEntries.day, input.day))
-    .limit(1);
-
-  if (existing) {
-    await db
-      .update(journalEntries)
-      .set({
-        mood: input.mood ?? null,
-        energy: input.energy ?? null,
-        discipline: input.discipline ?? null,
-        accomplished: input.accomplished ?? null,
-        challenged: input.challenged ?? null,
-        learned: input.learned ?? null,
-        tomorrowIntent: input.tomorrowIntent ?? null,
-        updatedAt: now,
-      })
-      .where(eq(journalEntries.id, existing.id));
-    const entry = await getJournalEntry(input.day);
-    return { entry: entry as JournalEntry, xpAwarded: 0 };
-  }
-
   const row = {
     id: uuid(),
     day: input.day,
@@ -135,7 +117,31 @@ export async function saveJournalEntry(
     createdAt: now,
     updatedAt: now,
   };
-  await db.insert(journalEntries).values(row);
+  const inserted = await db
+    .insert(journalEntries)
+    .values(row)
+    .onConflictDoNothing({ target: journalEntries.day })
+    .returning({ id: journalEntries.id });
+
+  if (inserted.length === 0) {
+    // Row already existed (today was saved before) — this is an edit: update
+    // in place, never re-award the daily XP.
+    await db
+      .update(journalEntries)
+      .set({
+        mood: input.mood ?? null,
+        energy: input.energy ?? null,
+        discipline: input.discipline ?? null,
+        accomplished: input.accomplished ?? null,
+        challenged: input.challenged ?? null,
+        learned: input.learned ?? null,
+        tomorrowIntent: input.tomorrowIntent ?? null,
+        updatedAt: now,
+      })
+      .where(eq(journalEntries.day, input.day));
+    const entry = await getJournalEntry(input.day);
+    return { entry: entry as JournalEntry, xpAwarded: 0 };
+  }
 
   // One-time daily reward — reuses the journal XP source (attribute: MIND).
   const { db: database } = await import('../db/client');

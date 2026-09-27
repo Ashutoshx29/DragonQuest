@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Button, Card, Screen, ThemedText } from '@/design-system/components';
 import { spacing } from '@/design-system/tokens';
 import { getSettings, setSetting, type SettingsShape } from '@/data/repositories';
+import { setDevPerfVisible } from '@/services/devPerf';
 import { setHapticsEnabled } from '@/services/haptics';
 import { sfx } from '@/services/audio';
 
@@ -14,6 +15,21 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void getSettings().then(setLocal);
+  }, []);
+
+  // Dev-only perf monitor control (F): the RN dev-menu overlay can cover the
+  // timer during manual testing. This tiny in-app badge replaces it; OFF by
+  // default and the whole card is compiled out of release builds (__DEV__).
+  const [perfOn, setPerfOn] = useState(false);
+  useEffect(() => {
+    if (__DEV__) void getSettings().then((s) => setPerfOn(s.devPerfBadge));
+  }, []);
+  const togglePerf = useCallback(async (next: boolean) => {
+    setPerfOn(next);
+    if (__DEV__) {
+      await setSetting('devPerfBadge', next);
+      setDevPerfVisible(next); // live-update the badge, no restart needed
+    }
   }, []);
 
   const update = useCallback(
@@ -72,10 +88,30 @@ export default function SettingsScreen() {
               Cloud sync
             </ThemedText>
             <ThemedText variant="caption" color="textDim">
-              Arrives in Phase 7 — your data will sync across devices with a free account.
+              Your progress syncs across devices with a free account.
             </ThemedText>
           </View>
         </Card>
+
+        {__DEV__ ? (
+          <Card>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowText}>
+                <ThemedText variant="subheading" color="textBright">
+                  Performance monitor (dev)
+                </ThemedText>
+                <ThemedText variant="caption" color="textDim">
+                  Frame-rate overlay for profiling. OFF keeps manual testing unobstructed — never ships in release builds.
+                </ThemedText>
+              </View>
+              <Switch
+                value={perfOn}
+                onValueChange={(v) => void togglePerf(v)}
+                trackColor={{ true: '#00E5FF', false: '#232837' }}
+              />
+            </View>
+          </Card>
+        ) : null}
 
         <Button label="Back" variant="secondary" icon="arrow-back" onPress={() => router.back()} style={styles.back} />
       </ScrollView>

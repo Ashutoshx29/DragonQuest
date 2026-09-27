@@ -39,6 +39,10 @@ export default function SignInScreen() {
         else if (needsConfirmation) setConfirmationSent(true);
         else router.back();
       }
+    } catch {
+      // Transport-level failures (offline, DNS, timeout) reject BEFORE any
+      // Supabase error object exists — surface them instead of redboxing.
+      setError('Network error — check your connection and try again.');
     } finally {
       setBusy(false);
     }

@@ -26,6 +26,12 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .expo-dev.log
+.expo-dev-server.log
+*.log
+
+# python cache
+__pycache__/
+*.py[cod]
 
 # macOS
 .DS_Store
@@ -48,3 +54,6 @@ example
 # The generated migration bundle the app imports lives in
 # src/data/db/drizzle/ and MUST be committed.
 /drizzle/
+
+# Supabase CLI local state (project ref, versions) — machine-specific.
+supabase/.temp/
