@@ -16,6 +16,6 @@ module.exports = defineConfig([
     },
   },
   {
-    ignores: ['dist/*', 'node_modules/*', '.expo/*', '.expo-dev.log'],
+    ignores: ['dist/*', 'node_modules/*', '.expo/*', '.expo-dev.log', 'scripts/_tmp*'],
   },
 ]);
